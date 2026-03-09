@@ -78,3 +78,4 @@
 - [x] Landing page showing user's groups
 - [x] All existing pages scoped to selected group
 - [x] Tests for group-scoped operations (38 passing)
+- [x] Fix: `<p>` cannot contain nested `<div>` error on Home page (/)

@@ -85,7 +85,7 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/10"><Trophy className="h-5 w-5 text-primary" /></div>
               <div>
-                <p className="text-2xl font-bold">{eventsLoading ? <Skeleton className="h-7 w-8" /> : activeEvents?.length ?? 0}</p>
+                <span className="text-2xl font-bold block">{eventsLoading ? <Skeleton className="h-7 w-8" /> : activeEvents?.length ?? 0}</span>
                 <p className="text-xs text-muted-foreground">Active Events</p>
               </div>
             </div>
@@ -96,7 +96,7 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-emerald-500/10"><BookOpen className="h-5 w-5 text-emerald-600" /></div>
               <div>
-                <p className="text-2xl font-bold">{completedLoading ? <Skeleton className="h-7 w-8" /> : completedEvents?.length ?? 0}</p>
+                <span className="text-2xl font-bold block">{completedLoading ? <Skeleton className="h-7 w-8" /> : completedEvents?.length ?? 0}</span>
                 <p className="text-xs text-muted-foreground">Books Read</p>
               </div>
             </div>
@@ -107,7 +107,7 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-blue-500/10"><Users className="h-5 w-5 text-blue-600" /></div>
               <div>
-                <p className="text-2xl font-bold">{membersLoading ? <Skeleton className="h-7 w-8" /> : members?.length ?? 0}</p>
+                <span className="text-2xl font-bold block">{membersLoading ? <Skeleton className="h-7 w-8" /> : members?.length ?? 0}</span>
                 <p className="text-xs text-muted-foreground">Members</p>
               </div>
             </div>
@@ -118,7 +118,7 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-purple-500/10"><Calendar className="h-5 w-5 text-purple-600" /></div>
               <div>
-                <p className="text-2xl font-bold">{calLoading ? <Skeleton className="h-7 w-8" /> : upcomingCal?.length ?? 0}</p>
+                <span className="text-2xl font-bold block">{calLoading ? <Skeleton className="h-7 w-8" /> : upcomingCal?.length ?? 0}</span>
                 <p className="text-xs text-muted-foreground">Upcoming Events</p>
               </div>
             </div>
