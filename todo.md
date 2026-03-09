@@ -48,4 +48,15 @@
 - [x] Deadline management for submissions, voting, reading
 
 ## Testing
-- [x] Vitest unit tests for all backend procedures (26 passing)
+- [x] Vitest unit tests for all backend procedures (35 passing)
+
+## New Features (v1.1)
+- [x] Book cover images via Open Library API auto-fetch
+- [x] Book cover display on submission cards, book lists, bracket views, and dashboard
+- [x] Notifications when voting rounds open (via notifyOwner)
+- [x] Notifications when deadlines approach (via notifyOwner)
+- [x] Notifications for new chat messages (via notifyOwner)
+- [x] Notifications when winner is selected (via notifyOwner)
+- [x] Visual bracket tree layout with conference columns, VS dividers, and champion final
+- [x] Open Library search component with cover preview in submission form
+- [x] New tests for Open Library, notifications, and cover URL features

@@ -1,4 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import BracketTree from "@/components/BracketTree";
+import OpenLibrarySearch from "@/components/OpenLibrarySearch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -54,7 +57,7 @@ export default function EventDetailPage() {
 
   const startVoting = trpc.events.startVoting.useMutation({
     onSuccess: () => {
-      toast.success("Voting started!");
+      toast.success("Voting started! Notifications sent.");
       utils.events.getById.invalidate({ id: eventId });
       utils.brackets.getForEvent.invalidate({ eventId });
     },
@@ -62,7 +65,7 @@ export default function EventDetailPage() {
   });
 
   const resolveVoting = trpc.voting.resolve.useMutation({
-    onSuccess: (data) => {
+    onSuccess: () => {
       toast.success("Voting resolved! Winner selected.");
       utils.events.getById.invalidate({ id: eventId });
       utils.voting.getResults.invalidate({ eventId });
@@ -255,10 +258,11 @@ export default function EventDetailPage() {
 
         <TabsContent value="voting" className="mt-4">
           {event.votingScheme === "tournament" ? (
-            <TournamentBracketView
+            <BracketTree
               eventId={eventId}
               brackets={bracketData ?? []}
               eventStatus={event.status}
+              isAdmin={user?.role === "admin"}
             />
           ) : (
             <VotingView
@@ -281,9 +285,20 @@ function WinnerCard({ bookId }: { bookId: number }) {
   return (
     <Card className="border-primary/30 bg-primary/5">
       <CardContent className="p-5 flex items-center gap-4">
-        <div className="p-3 rounded-full bg-primary/10">
-          <Crown className="h-6 w-6 text-primary" />
-        </div>
+        {book.coverUrl ? (
+          <img
+            src={book.coverUrl}
+            alt={book.title}
+            className="h-20 w-14 rounded-lg object-cover shadow-md"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+            }}
+          />
+        ) : (
+          <div className="p-3 rounded-full bg-primary/10">
+            <Crown className="h-6 w-6 text-primary" />
+          </div>
+        )}
         <div>
           <p className="text-xs text-muted-foreground uppercase tracking-wider">
             Winner
@@ -320,7 +335,7 @@ function SubmissionsTab({
               Submit a Book
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Submit a Book</DialogTitle>
             </DialogHeader>
@@ -346,8 +361,20 @@ function SubmissionsTab({
           {subs.map((sub) => (
             <Card key={sub.id}>
               <CardContent className="p-4 flex items-center gap-4">
-                <div className="h-14 w-10 rounded bg-primary/10 flex items-center justify-center shrink-0">
-                  <BookOpen className="h-5 w-5 text-primary" />
+                {sub.bookCoverUrl ? (
+                  <img
+                    src={sub.bookCoverUrl}
+                    alt={sub.bookTitle}
+                    className="h-16 w-12 rounded object-cover shadow-sm shrink-0"
+                    onError={(e) => {
+                      const el = e.target as HTMLImageElement;
+                      el.style.display = "none";
+                      el.nextElementSibling?.classList.remove("hidden");
+                    }}
+                  />
+                ) : null}
+                <div className={`h-16 w-12 rounded bg-primary/10 flex items-center justify-center shrink-0 ${sub.bookCoverUrl ? "hidden" : ""}`}>
+                  <BookOpen className="h-6 w-6 text-primary" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold truncate">{sub.bookTitle}</p>
@@ -389,7 +416,10 @@ function SubmitBookForm({
   const [pageCount, setPageCount] = useState("");
   const [rating, setRating] = useState("");
   const [description, setDescription] = useState("");
+  const [coverUrl, setCoverUrl] = useState("");
+  const [isbn, setIsbn] = useState("");
   const [isAnonymous, setIsAnonymous] = useState(false);
+  const [showManual, setShowManual] = useState(false);
 
   const createBook = trpc.books.create.useMutation();
   const submitBook = trpc.submissions.create.useMutation({
@@ -399,6 +429,24 @@ function SubmitBookForm({
     },
     onError: (err) => toast.error(err.message),
   });
+
+  const handleOpenLibrarySelect = (book: {
+    title: string;
+    author: string;
+    coverUrl?: string;
+    pageCount?: number;
+    isbn?: string;
+    genre?: string;
+  }) => {
+    setTitle(book.title);
+    setAuthor(book.author);
+    if (book.coverUrl) setCoverUrl(book.coverUrl);
+    if (book.pageCount) setPageCount(String(book.pageCount));
+    if (book.isbn) setIsbn(book.isbn);
+    if (book.genre) setGenre(book.genre);
+    setShowManual(true);
+    toast.success(`Selected "${book.title}" — review details below`);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -414,6 +462,8 @@ function SubmitBookForm({
         pageCount: pageCount ? parseInt(pageCount) : undefined,
         rating: rating ? parseInt(rating) : undefined,
         description: description || undefined,
+        coverUrl: coverUrl || undefined,
+        isbn: isbn || undefined,
       });
       await submitBook.mutateAsync({
         eventId,
@@ -428,289 +478,92 @@ function SubmitBookForm({
   const isLoading = createBook.isPending || submitBook.isPending;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label>Title *</Label>
-        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Book title" />
+    <div className="space-y-4">
+      {/* Open Library Search */}
+      <div>
+        <Label className="text-sm font-medium mb-2 block">Search Open Library</Label>
+        <OpenLibrarySearch onSelect={handleOpenLibrarySelect} />
       </div>
-      <div className="space-y-2">
-        <Label>Author *</Label>
-        <Input value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="Author name" />
+
+      <div className="flex items-center gap-3">
+        <Separator className="flex-1" />
+        <span className="text-xs text-muted-foreground">or enter manually</span>
+        <Separator className="flex-1" />
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label>Genre</Label>
-          <Input value={genre} onChange={(e) => setGenre(e.target.value)} placeholder="e.g. Fiction" />
-        </div>
-        <div className="space-y-2">
-          <Label>Pages</Label>
-          <Input type="number" value={pageCount} onChange={(e) => setPageCount(e.target.value)} placeholder="Page count" />
-        </div>
-      </div>
-      <div className="space-y-2">
-        <Label>Rating (0-100)</Label>
-        <Input type="number" min="0" max="100" value={rating} onChange={(e) => setRating(e.target.value)} placeholder="Critical rating" />
-      </div>
-      <div className="space-y-2">
-        <Label>Description</Label>
-        <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Brief description" />
-      </div>
-      <div className="flex items-center justify-between">
-        <Label>Anonymous submission</Label>
-        <Switch checked={isAnonymous} onCheckedChange={setIsAnonymous} />
-      </div>
-      <Button type="submit" className="w-full" disabled={isLoading}>
-        {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-        Submit Book
-      </Button>
-    </form>
-  );
-}
 
-function TournamentBracketView({
-  eventId,
-  brackets,
-  eventStatus,
-}: {
-  eventId: number;
-  brackets: any[];
-  eventStatus: string;
-}) {
-  const { user } = useAuth();
-  const utils = trpc.useUtils();
+      {!showManual && !title && (
+        <Button
+          variant="outline"
+          className="w-full"
+          onClick={() => setShowManual(true)}
+        >
+          Enter book details manually
+        </Button>
+      )}
 
-  const voteMutation = trpc.brackets.vote.useMutation({
-    onSuccess: () => {
-      toast.success("Vote cast!");
-      utils.brackets.getForEvent.invalidate({ eventId });
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const resolveMutation = trpc.brackets.resolveMatch.useMutation({
-    onSuccess: () => {
-      toast.success("Match resolved!");
-      utils.brackets.getForEvent.invalidate({ eventId });
-      utils.events.getById.invalidate({ id: eventId });
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  if (brackets.length === 0) {
-    return (
-      <div className="text-center py-8 text-muted-foreground">
-        <Trophy className="h-10 w-10 mx-auto mb-2 opacity-40" />
-        <p>Bracket not generated yet</p>
-      </div>
-    );
-  }
-
-  const maxRound = Math.max(...brackets.map((b) => b.round));
-  const rounds = Array.from({ length: maxRound }, (_, i) => i + 1);
-
-  const getRoundLabel = (round: number) => {
-    if (round === maxRound) return "Finals";
-    if (round === maxRound - 1) return "Conference Finals";
-    if (round === 1) return "Round 1";
-    return `Round ${round}`;
-  };
-
-  return (
-    <div className="space-y-6">
-      {rounds.map((round) => {
-        const roundBrackets = brackets.filter((b) => b.round === round);
-        return (
-          <div key={round}>
-            <h3 className="font-serif font-bold text-lg mb-3">
-              {getRoundLabel(round)}
-            </h3>
-            <div className="grid gap-3 md:grid-cols-2">
-              {roundBrackets.map((bracket) => (
-                <BracketMatchCard
-                  key={bracket.id}
-                  bracket={bracket}
-                  eventId={eventId}
-                  isAdmin={user?.role === "admin"}
-                  eventStatus={eventStatus}
-                  onVote={(bookId) =>
-                    voteMutation.mutate({
-                      bracketId: bracket.id,
-                      bookId,
-                      eventId,
-                    })
-                  }
-                  onResolve={() =>
-                    resolveMutation.mutate({
-                      bracketId: bracket.id,
-                      eventId,
-                    })
-                  }
-                  isVoting={voteMutation.isPending}
-                  isResolving={resolveMutation.isPending}
-                />
-              ))}
+      {(showManual || title) && (
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Cover preview */}
+          {coverUrl && (
+            <div className="flex justify-center">
+              <img
+                src={coverUrl}
+                alt="Book cover"
+                className="h-32 rounded-lg shadow-md object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
+              />
             </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function BracketMatchCard({
-  bracket,
-  eventId,
-  isAdmin,
-  eventStatus,
-  onVote,
-  onResolve,
-  isVoting,
-  isResolving,
-}: {
-  bracket: any;
-  eventId: number;
-  isAdmin: boolean;
-  eventStatus: string;
-  onVote: (bookId: number) => void;
-  onResolve: () => void;
-  isVoting: boolean;
-  isResolving: boolean;
-}) {
-  const { data: myVote } = trpc.brackets.myVote.useQuery(
-    { bracketId: bracket.id },
-    { enabled: bracket.status === "voting" }
-  );
-  const { data: votes } = trpc.brackets.getVotes.useQuery(
-    { bracketId: bracket.id },
-    { enabled: bracket.status !== "pending" }
-  );
-
-  const book1Votes = votes?.filter((v) => v.bookId === bracket.book1Id).length ?? 0;
-  const book2Votes = votes?.filter((v) => v.bookId === bracket.book2Id).length ?? 0;
-
-  const canVote = bracket.status === "voting" && !myVote && eventStatus === "voting";
-
-  return (
-    <Card
-      className={
-        bracket.status === "completed"
-          ? "opacity-80"
-          : bracket.status === "voting"
-            ? "border-primary/30"
-            : ""
-      }
-    >
-      <CardContent className="p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <Badge variant="outline" className="text-xs">
-            {bracket.conference === "A" && bracket.round < Math.max(bracket.round)
-              ? `Conf A`
-              : bracket.conference === "B"
-                ? `Conf B`
-                : ""}
-            {bracket.status === "voting" && " · Voting"}
-            {bracket.status === "completed" && " · Done"}
-            {bracket.status === "pending" && " · Pending"}
-          </Badge>
-          {bracket.status !== "pending" && (
-            <span className="text-xs text-muted-foreground">
-              {(votes?.length ?? 0)} votes
-            </span>
           )}
-        </div>
 
-        {/* Book 1 */}
-        <div
-          className={`p-3 rounded-lg border transition-colors ${
-            canVote ? "cursor-pointer hover:bg-accent" : ""
-          } ${bracket.winnerId === bracket.book1Id ? "border-primary bg-primary/5" : ""} ${
-            myVote?.bookId === bracket.book1Id ? "ring-2 ring-primary/50" : ""
-          }`}
-          onClick={() => canVote && bracket.book1Id && onVote(bracket.book1Id)}
-        >
-          <div className="flex items-center justify-between">
-            <div className="min-w-0">
-              {bracket.book1 ? (
-                <>
-                  <p className="font-medium truncate">
-                    {bracket.book1Seed && (
-                      <span className="text-xs text-muted-foreground mr-1">
-                        #{bracket.book1Seed}
-                      </span>
-                    )}
-                    {bracket.book1.title}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {bracket.book1.author}
-                  </p>
-                </>
-              ) : (
-                <p className="text-muted-foreground italic">TBD</p>
-              )}
-            </div>
-            {bracket.status !== "pending" && (
-              <span className="text-sm font-bold ml-2">{book1Votes}</span>
-            )}
+          <div className="space-y-2">
+            <Label>Title *</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Book title" />
           </div>
-        </div>
-
-        <div className="text-center text-xs text-muted-foreground font-medium">
-          VS
-        </div>
-
-        {/* Book 2 */}
-        <div
-          className={`p-3 rounded-lg border transition-colors ${
-            canVote ? "cursor-pointer hover:bg-accent" : ""
-          } ${bracket.winnerId === bracket.book2Id ? "border-primary bg-primary/5" : ""} ${
-            myVote?.bookId === bracket.book2Id ? "ring-2 ring-primary/50" : ""
-          }`}
-          onClick={() => canVote && bracket.book2Id && onVote(bracket.book2Id)}
-        >
-          <div className="flex items-center justify-between">
-            <div className="min-w-0">
-              {bracket.book2 ? (
-                <>
-                  <p className="font-medium truncate">
-                    {bracket.book2Seed && (
-                      <span className="text-xs text-muted-foreground mr-1">
-                        #{bracket.book2Seed}
-                      </span>
-                    )}
-                    {bracket.book2.title}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {bracket.book2.author}
-                  </p>
-                </>
-              ) : (
-                <p className="text-muted-foreground italic">TBD</p>
-              )}
-            </div>
-            {bracket.status !== "pending" && (
-              <span className="text-sm font-bold ml-2">{book2Votes}</span>
-            )}
+          <div className="space-y-2">
+            <Label>Author *</Label>
+            <Input value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="Author name" />
           </div>
-        </div>
-
-        {isAdmin && bracket.status === "voting" && eventStatus === "voting" && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={onResolve}
-            disabled={isResolving}
-          >
-            {isResolving ? (
-              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-            ) : (
-              <Trophy className="h-3 w-3 mr-1" />
-            )}
-            Resolve Match
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Genre</Label>
+              <Input value={genre} onChange={(e) => setGenre(e.target.value)} placeholder="e.g. Fiction" />
+            </div>
+            <div className="space-y-2">
+              <Label>Pages</Label>
+              <Input type="number" value={pageCount} onChange={(e) => setPageCount(e.target.value)} placeholder="Page count" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Rating (0-100)</Label>
+              <Input type="number" min="0" max="100" value={rating} onChange={(e) => setRating(e.target.value)} placeholder="Critical rating" />
+            </div>
+            <div className="space-y-2">
+              <Label>ISBN</Label>
+              <Input value={isbn} onChange={(e) => setIsbn(e.target.value)} placeholder="ISBN" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Cover URL</Label>
+            <Input value={coverUrl} onChange={(e) => setCoverUrl(e.target.value)} placeholder="https://..." />
+          </div>
+          <div className="space-y-2">
+            <Label>Description</Label>
+            <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Brief description" />
+          </div>
+          <div className="flex items-center justify-between">
+            <Label>Anonymous submission</Label>
+            <Switch checked={isAnonymous} onCheckedChange={setIsAnonymous} />
+          </div>
+          <Button type="submit" className="w-full" disabled={isLoading}>
+            {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            Submit Book
           </Button>
-        )}
-      </CardContent>
-    </Card>
+        </form>
+      )}
+    </div>
   );
 }
 
@@ -771,9 +624,20 @@ function VotingView({
               }
             >
               <CardContent className="p-4 flex items-center gap-4">
-                <div className="h-12 w-9 rounded bg-primary/10 flex items-center justify-center shrink-0">
-                  <BookOpen className="h-5 w-5 text-primary" />
-                </div>
+                {sub.bookCoverUrl ? (
+                  <img
+                    src={sub.bookCoverUrl}
+                    alt={sub.bookTitle}
+                    className="h-14 w-10 rounded object-cover shadow-sm shrink-0"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = "none";
+                    }}
+                  />
+                ) : (
+                  <div className="h-14 w-10 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                    <BookOpen className="h-5 w-5 text-primary" />
+                  </div>
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold truncate">{sub.bookTitle}</p>
                   <p className="text-sm text-muted-foreground">{sub.bookAuthor}</p>
@@ -825,7 +689,18 @@ function VotingView({
                   }
                 >
                   <CardContent className="p-3 flex items-center gap-3">
-                    <BookOpen className="h-4 w-4 text-primary shrink-0" />
+                    {sub.bookCoverUrl ? (
+                      <img
+                        src={sub.bookCoverUrl}
+                        alt={sub.bookTitle}
+                        className="h-10 w-7 rounded object-cover shrink-0"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                    ) : (
+                      <BookOpen className="h-4 w-4 text-primary shrink-0" />
+                    )}
                     <span className="font-medium truncate">{sub.bookTitle}</span>
                     <span className="text-sm text-muted-foreground">
                       {sub.bookAuthor}

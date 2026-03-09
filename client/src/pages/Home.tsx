@@ -223,9 +223,20 @@ export default function Home() {
                     key={event.id}
                     className="flex items-center gap-3 p-3 rounded-lg border"
                   >
-                    <div className="h-12 w-9 rounded bg-primary/10 flex items-center justify-center shrink-0">
-                      <BookOpen className="h-5 w-5 text-primary" />
-                    </div>
+                    {event.bookCoverUrl ? (
+                      <img
+                        src={event.bookCoverUrl}
+                        alt={event.bookTitle ?? ""}
+                        className="h-14 w-10 rounded object-cover shadow-sm shrink-0"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                    ) : (
+                      <div className="h-14 w-10 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                        <BookOpen className="h-5 w-5 text-primary" />
+                      </div>
+                    )}
                     <div className="min-w-0">
                       <p className="font-medium truncate">
                         {event.bookTitle ?? "Unknown"}

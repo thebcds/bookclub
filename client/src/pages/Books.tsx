@@ -7,6 +7,25 @@ import { trpc } from "@/lib/trpc";
 import { BookOpen, Search } from "lucide-react";
 import { useState } from "react";
 
+function BookCover({ coverUrl, title }: { coverUrl?: string | null; title: string }) {
+  const [imgError, setImgError] = useState(false);
+  if (coverUrl && !imgError) {
+    return (
+      <img
+        src={coverUrl}
+        alt={title}
+        className="h-20 w-14 rounded-lg object-cover shadow-sm shrink-0"
+        onError={() => setImgError(true)}
+      />
+    );
+  }
+  return (
+    <div className="h-20 w-14 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+      <BookOpen className="h-6 w-6 text-primary" />
+    </div>
+  );
+}
+
 export default function BooksPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const { data: allBooks, isLoading } = trpc.books.list.useQuery();
@@ -20,15 +39,13 @@ export default function BooksPage() {
   );
 
   const BookCard = ({ book }: { book: NonNullable<typeof allBooks>[0] }) => (
-    <Card>
+    <Card className="hover:shadow-sm transition-shadow">
       <CardContent className="p-4 flex items-center gap-4">
-        <div className="h-16 w-12 rounded bg-primary/10 flex items-center justify-center shrink-0">
-          <BookOpen className="h-6 w-6 text-primary" />
-        </div>
+        <BookCover coverUrl={book.coverUrl} title={book.title} />
         <div className="min-w-0 flex-1">
           <p className="font-semibold truncate">{book.title}</p>
           <p className="text-sm text-muted-foreground">{book.author}</p>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
             {book.genre && (
               <Badge variant="secondary" className="text-xs">
                 {book.genre}
@@ -87,7 +104,7 @@ export default function BooksPage() {
           {isLoading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-20 w-full" />
+                <Skeleton key={i} className="h-24 w-full" />
               ))}
             </div>
           ) : filteredBooks && filteredBooks.length > 0 ? (
@@ -109,17 +126,15 @@ export default function BooksPage() {
           {readLoading ? (
             <div className="space-y-3">
               {[1, 2].map((i) => (
-                <Skeleton key={i} className="h-20 w-full" />
+                <Skeleton key={i} className="h-24 w-full" />
               ))}
             </div>
           ) : readBooks && readBooks.length > 0 ? (
             <div className="grid gap-3">
               {readBooks.map((book) => (
-                <Card key={book.id}>
+                <Card key={book.id} className="hover:shadow-sm transition-shadow">
                   <CardContent className="p-4 flex items-center gap-4">
-                    <div className="h-16 w-12 rounded bg-primary/10 flex items-center justify-center shrink-0">
-                      <BookOpen className="h-6 w-6 text-primary" />
-                    </div>
+                    <BookCover coverUrl={book.coverUrl} title={book.title} />
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold truncate">{book.title}</p>
                       <p className="text-sm text-muted-foreground">

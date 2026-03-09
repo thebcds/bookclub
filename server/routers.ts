@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { notifyOwner } from "./_core/notification";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import * as db from "./db";
@@ -124,6 +125,67 @@ export const appRouter = router({
     }),
   }),
 
+  // ─── Open Library Search ───────────────────────────────────────
+  openLibrary: router({
+    search: protectedProcedure
+      .input(z.object({ query: z.string().min(1) }))
+      .query(async ({ input }) => {
+        try {
+          const res = await fetch(
+            `https://openlibrary.org/search.json?q=${encodeURIComponent(input.query)}&limit=10&fields=key,title,author_name,cover_i,first_publish_year,number_of_pages_median,isbn,subject`
+          );
+          if (!res.ok) return [];
+          const data = await res.json();
+          return (data.docs ?? []).map((doc: any) => ({
+            key: doc.key,
+            title: doc.title ?? "Unknown",
+            author: doc.author_name?.[0] ?? "Unknown",
+            coverId: doc.cover_i ?? null,
+            coverUrl: doc.cover_i
+              ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`
+              : null,
+            year: doc.first_publish_year ?? null,
+            pageCount: doc.number_of_pages_median ?? null,
+            isbn: doc.isbn?.[0] ?? null,
+            genres: (doc.subject ?? []).slice(0, 5) as string[],
+          }));
+        } catch {
+          return [];
+        }
+      }),
+  }),
+
+  // ─── Notifications ────────────────────────────────────────────
+  notifications: router({
+    notifyVotingOpen: adminProcedure
+      .input(z.object({ eventId: z.number(), eventTitle: z.string() }))
+      .mutation(async ({ input }) => {
+        await notifyOwner({
+          title: `Voting Now Open: ${input.eventTitle}`,
+          content: `The voting round for "${input.eventTitle}" has started. Head to the Book Club portal to cast your vote!`,
+        });
+        return { success: true };
+      }),
+    notifyDeadline: adminProcedure
+      .input(z.object({ eventTitle: z.string(), deadlineType: z.string(), deadline: z.string() }))
+      .mutation(async ({ input }) => {
+        await notifyOwner({
+          title: `Deadline Approaching: ${input.eventTitle}`,
+          content: `The ${input.deadlineType} deadline for "${input.eventTitle}" is ${input.deadline}. Don't miss it!`,
+        });
+        return { success: true };
+      }),
+    notifyNewChat: protectedProcedure
+      .input(z.object({ senderName: z.string(), preview: z.string() }))
+      .mutation(async ({ input }) => {
+        await notifyOwner({
+          title: `New Chat Message from ${input.senderName}`,
+          content: input.preview.slice(0, 200),
+        });
+        return { success: true };
+      }),
+  }),
+
   // ─── Events ───────────────────────────────────────────────────
   events: router({
     create: adminProcedure
@@ -196,6 +258,17 @@ export const appRouter = router({
         }
 
         await db.updateEventStatus(input.eventId, "voting");
+
+        // Send notification
+        try {
+          await notifyOwner({
+            title: `Voting Now Open: ${event.title}`,
+            content: `The voting round for "${event.title}" has started with ${subs.length} book submissions. Head to the Book Club portal to cast your vote!`,
+          });
+        } catch {
+          // Notification failure is non-critical
+        }
+
         return { success: true };
       }),
   }),
@@ -416,6 +489,17 @@ export const appRouter = router({
               sub.bookId === winnerId
             );
           }
+          // Notify about tournament champion
+          const event = await db.getEventById(input.eventId);
+          const winnerBook = await db.getBookById(winnerId);
+          try {
+            await notifyOwner({
+              title: `Tournament Champion: ${winnerBook?.title ?? "Unknown"}`,
+              content: `"${winnerBook?.title ?? "Unknown"}" by ${winnerBook?.author ?? "Unknown"} has won the ${event?.title ?? ""} tournament! Time to start reading.`,
+            });
+          } catch {
+            // Notification failure is non-critical
+          }
         }
 
         return { winnerId };
@@ -527,6 +611,16 @@ export const appRouter = router({
           for (const sub of subs) {
             await db.recordSubmissionHistory(sub.bookId, input.eventId, sub.bookId === winnerId);
           }
+          // Notify about winner
+          const winnerBook = await db.getBookById(winnerId);
+          try {
+            await notifyOwner({
+              title: `Winner Selected: ${event.title}`,
+              content: `"${winnerBook?.title ?? "Unknown"}" by ${winnerBook?.author ?? "Unknown"} has won the ${event.title} selection! Time to start reading.`,
+            });
+          } catch {
+            // Notification failure is non-critical
+          }
         }
 
         return { winnerId };
@@ -588,6 +682,17 @@ export const appRouter = router({
           content: input.content,
           eventId: input.eventId,
         });
+
+        // Send notification for new chat messages (non-blocking)
+        try {
+          await notifyOwner({
+            title: `New Chat: ${ctx.user.name ?? "A member"}`,
+            content: input.content.slice(0, 200),
+          });
+        } catch {
+          // Notification failure is non-critical
+        }
+
         return { id };
       }),
     messages: protectedProcedure

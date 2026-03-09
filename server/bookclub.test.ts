@@ -424,11 +424,98 @@ describe("members", () => {
 
   it("admin can update member role", async () => {
     const caller = appRouter.createCaller(createCtx(createAdminUser()));
-    // This will call the mock, which should not throw
     const result = await caller.members.updateRole({
       userId: 1,
       role: "admin",
     });
     expect(result.success).toBe(true);
+  });
+});
+
+describe("openLibrary", () => {
+  it("searches Open Library for books", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const results = await caller.openLibrary.search({ query: "The Great Gatsby" });
+    expect(Array.isArray(results)).toBe(true);
+    // Results come from the real Open Library API
+    if (results.length > 0) {
+      expect(results[0]).toHaveProperty("title");
+      expect(results[0]).toHaveProperty("author");
+      expect(results[0]).toHaveProperty("coverUrl");
+    }
+  });
+
+  it("rejects empty search query", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    await expect(
+      caller.openLibrary.search({ query: "" })
+    ).rejects.toThrow();
+  });
+
+  it("requires authentication", async () => {
+    const caller = appRouter.createCaller(createCtx(null));
+    await expect(
+      caller.openLibrary.search({ query: "test" })
+    ).rejects.toThrow();
+  });
+});
+
+describe("notifications", () => {
+  it("admin can send voting notification", async () => {
+    const caller = appRouter.createCaller(createCtx(createAdminUser()));
+    const result = await caller.notifications.notifyVotingOpen({
+      eventId: 1,
+      eventTitle: "March Selection",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("admin can send deadline notification", async () => {
+    const caller = appRouter.createCaller(createCtx(createAdminUser()));
+    const result = await caller.notifications.notifyDeadline({
+      eventTitle: "March Selection",
+      deadlineType: "submission",
+      deadline: "2026-04-01",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("non-admin cannot send voting notification", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    await expect(
+      caller.notifications.notifyVotingOpen({ eventId: 1, eventTitle: "Test" })
+    ).rejects.toThrow();
+  });
+
+  it("authenticated user can send chat notification", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.notifications.notifyNewChat({
+      senderName: "Test User",
+      preview: "Check out this book!",
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+describe("books with cover URL", () => {
+  it("creates a book with cover URL", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.books.create({
+      title: "Dune",
+      author: "Frank Herbert",
+      coverUrl: "https://covers.openlibrary.org/b/id/12345-L.jpg",
+      pageCount: 412,
+      genre: "Science Fiction",
+    });
+    expect(result.id).toBeDefined();
+  });
+
+  it("creates a book without cover URL", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.books.create({
+      title: "1984",
+      author: "George Orwell",
+    });
+    expect(result.id).toBeDefined();
   });
 });
