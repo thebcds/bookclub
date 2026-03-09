@@ -1,17 +1,18 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { relations } from "drizzle-orm";
+import {
+  boolean,
+  int,
+  json,
+  mysqlEnum,
+  mysqlTable,
+  text,
+  timestamp,
+  varchar,
+} from "drizzle-orm/mysql-core";
 
-/**
- * Core user table backing auth flow.
- * Extend this file with additional tables as your product grows.
- * Columns use camelCase to match both database fields and generated types.
- */
+// ─── Users ───────────────────────────────────────────────────────────
 export const users = mysqlTable("users", {
-  /**
-   * Surrogate primary key. Auto-incremented numeric value managed by the database.
-   * Use this for relations between tables.
-   */
   id: int("id").autoincrement().primaryKey(),
-  /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
@@ -25,4 +26,212 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+// ─── Invitations ─────────────────────────────────────────────────────
+export const invitations = mysqlTable("invitations", {
+  id: int("id").autoincrement().primaryKey(),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  invitedBy: int("invitedBy").notNull(),
+  email: varchar("email", { length: 320 }),
+  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  status: mysqlEnum("status", ["pending", "accepted", "expired"])
+    .default("pending")
+    .notNull(),
+  acceptedBy: int("acceptedBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+});
+
+// ─── Books (master catalog) ─────────────────────────────────────────
+export const books = mysqlTable("books", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 512 }).notNull(),
+  author: varchar("author", { length: 512 }).notNull(),
+  genre: varchar("genre", { length: 128 }),
+  pageCount: int("pageCount"),
+  coverUrl: text("coverUrl"),
+  rating: int("rating"), // 1-100 scale for critical rating
+  isbn: varchar("isbn", { length: 20 }),
+  description: text("description"),
+  hasBeenRead: boolean("hasBeenRead").default(false).notNull(),
+  readDate: timestamp("readDate"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── Events (selection rounds) ──────────────────────────────────────
+export const events = mysqlTable("events", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 256 }).notNull(),
+  description: text("description"),
+  votingScheme: mysqlEnum("votingScheme", [
+    "tournament",
+    "simple_majority",
+    "ranked_choice",
+  ]).notNull(),
+  status: mysqlEnum("status", [
+    "submissions_open",
+    "voting",
+    "completed",
+    "cancelled",
+  ])
+    .default("submissions_open")
+    .notNull(),
+  // Submission parameters
+  maxPageCount: int("maxPageCount"),
+  allowPreviouslyRead: boolean("allowPreviouslyRead").default(false).notNull(),
+  allowedGenres: json("allowedGenres"), // string[] or null for any
+  minRating: int("minRating"),
+  anonymousSubmissions: boolean("anonymousSubmissions").default(false).notNull(),
+  maxSubmissions: int("maxSubmissions").default(8).notNull(),
+  // Dates
+  submissionDeadline: timestamp("submissionDeadline"),
+  votingDeadline: timestamp("votingDeadline"),
+  readingDeadline: timestamp("readingDeadline"),
+  // Winner
+  winningBookId: int("winningBookId"),
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// ─── Submissions ────────────────────────────────────────────────────
+export const submissions = mysqlTable("submissions", {
+  id: int("id").autoincrement().primaryKey(),
+  eventId: int("eventId").notNull(),
+  bookId: int("bookId").notNull(),
+  submittedBy: int("submittedBy").notNull(),
+  isAnonymous: boolean("isAnonymous").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── Tournament Brackets ────────────────────────────────────────────
+export const brackets = mysqlTable("brackets", {
+  id: int("id").autoincrement().primaryKey(),
+  eventId: int("eventId").notNull(),
+  // conference A or B
+  conference: mysqlEnum("conference", ["A", "B"]).notNull(),
+  round: int("round").notNull(), // 1 = first round, 2 = semis, 3 = finals
+  matchOrder: int("matchOrder").notNull(), // position within the round
+  book1Id: int("book1Id"),
+  book2Id: int("book2Id"),
+  book1Seed: int("book1Seed"),
+  book2Seed: int("book2Seed"),
+  winnerId: int("winnerId"),
+  status: mysqlEnum("status", ["pending", "voting", "completed"])
+    .default("pending")
+    .notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── Votes ──────────────────────────────────────────────────────────
+export const votes = mysqlTable("votes", {
+  id: int("id").autoincrement().primaryKey(),
+  eventId: int("eventId").notNull(),
+  bracketId: int("bracketId"), // for tournament voting
+  userId: int("userId").notNull(),
+  bookId: int("bookId").notNull(), // the book voted for (or top choice)
+  rankings: json("rankings"), // for ranked choice: [bookId, bookId, ...]
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── Calendar Events ────────────────────────────────────────────────
+export const calendarEvents = mysqlTable("calendarEvents", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 256 }).notNull(),
+  description: text("description"),
+  eventType: mysqlEnum("eventType", [
+    "submission_deadline",
+    "voting_deadline",
+    "reading_milestone",
+    "meeting",
+    "custom",
+  ]).notNull(),
+  startDate: timestamp("startDate").notNull(),
+  endDate: timestamp("endDate"),
+  relatedEventId: int("relatedEventId"), // link to selection event
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── Chat Messages ──────────────────────────────────────────────────
+export const chatMessages = mysqlTable("chatMessages", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  content: text("content").notNull(),
+  eventId: int("eventId"), // optional: scoped to an event
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── Book Submission History (for seeding advantage) ────────────────
+export const submissionHistory = mysqlTable("submissionHistory", {
+  id: int("id").autoincrement().primaryKey(),
+  bookId: int("bookId").notNull(),
+  eventId: int("eventId").notNull(),
+  didWin: boolean("didWin").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── Reading Milestones ─────────────────────────────────────────────
+export const readingMilestones = mysqlTable("readingMilestones", {
+  id: int("id").autoincrement().primaryKey(),
+  eventId: int("eventId").notNull(),
+  title: varchar("title", { length: 256 }).notNull(),
+  description: text("description"),
+  targetDate: timestamp("targetDate").notNull(),
+  targetPage: int("targetPage"),
+  targetPercent: int("targetPercent"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── Relations ──────────────────────────────────────────────────────
+export const usersRelations = relations(users, ({ many }) => ({
+  submissions: many(submissions),
+  votes: many(votes),
+  chatMessages: many(chatMessages),
+}));
+
+export const eventsRelations = relations(events, ({ many, one }) => ({
+  submissions: many(submissions),
+  brackets: many(brackets),
+  votes: many(votes),
+  calendarEvents: many(calendarEvents),
+  milestones: many(readingMilestones),
+  winningBook: one(books, {
+    fields: [events.winningBookId],
+    references: [books.id],
+  }),
+  creator: one(users, { fields: [events.createdBy], references: [users.id] }),
+}));
+
+export const submissionsRelations = relations(submissions, ({ one }) => ({
+  event: one(events, {
+    fields: [submissions.eventId],
+    references: [events.id],
+  }),
+  book: one(books, { fields: [submissions.bookId], references: [books.id] }),
+  submitter: one(users, {
+    fields: [submissions.submittedBy],
+    references: [users.id],
+  }),
+}));
+
+export const bracketsRelations = relations(brackets, ({ one, many }) => ({
+  event: one(events, { fields: [brackets.eventId], references: [events.id] }),
+  book1: one(books, { fields: [brackets.book1Id], references: [books.id] }),
+  book2: one(books, { fields: [brackets.book2Id], references: [books.id] }),
+  winner: one(books, { fields: [brackets.winnerId], references: [books.id] }),
+  votes: many(votes),
+}));
+
+export const votesRelations = relations(votes, ({ one }) => ({
+  event: one(events, { fields: [votes.eventId], references: [events.id] }),
+  bracket: one(brackets, {
+    fields: [votes.bracketId],
+    references: [brackets.id],
+  }),
+  user: one(users, { fields: [votes.userId], references: [users.id] }),
+  book: one(books, { fields: [votes.bookId], references: [books.id] }),
+}));
+
+export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
+  user: one(users, { fields: [chatMessages.userId], references: [users.id] }),
+}));
