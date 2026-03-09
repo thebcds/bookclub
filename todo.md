@@ -48,7 +48,7 @@
 - [x] Deadline management for submissions, voting, reading
 
 ## Testing
-- [x] Vitest unit tests for all backend procedures (35 passing)
+- [x] Vitest unit tests for all backend procedures (38 passing)
 
 ## New Features (v1.1)
 - [x] Book cover images via Open Library API auto-fetch
@@ -63,3 +63,18 @@
 
 ## Bugs
 - [x] Preview not loading - fixed by clearing zombie processes and restarting server on port 3000
+
+## Multi-Group Support (v2.0)
+- [x] Groups table in database schema
+- [x] Group memberships table with role (admin/member) per group
+- [x] Add groupId foreign key to: books, events, submissions, brackets, votes, calendar_events, chat_messages, invitations, reading_milestones, submission_history
+- [x] Group CRUD API (create, update, list, get)
+- [x] Group membership API (join, leave, invite, manage roles)
+- [x] Scope all data queries by groupId
+- [x] Group selector/switcher in sidebar navigation
+- [x] Group creation and management page
+- [x] Group-specific invitations (invite to a specific group)
+- [x] Group settings page (name, description, admin management)
+- [x] Landing page showing user's groups
+- [x] All existing pages scoped to selected group
+- [x] Tests for group-scoped operations (38 passing)

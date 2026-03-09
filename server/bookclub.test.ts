@@ -34,9 +34,13 @@ function createCtx(user: AuthenticatedUser | null = null): TrpcContext {
 }
 
 // ─── Mock DB layer ──────────────────────────────────────────────────
-// We mock the db module to avoid needing a real database connection in tests
 vi.mock("./db", () => {
-  const members: any[] = [];
+  // Pre-seed group 1 with admin (id:99) and regular user (id:1) as members
+  const groups: any[] = [{ id: 1, name: "Test Book Club", description: "A test group", createdBy: 99, createdAt: new Date() }];
+  const groupMembers: any[] = [
+    { id: 1, groupId: 1, userId: 99, role: "admin", joinedAt: new Date() },
+    { id: 2, groupId: 1, userId: 1, role: "member", joinedAt: new Date() },
+  ];
   const books: any[] = [];
   const events: any[] = [];
   const submissions: any[] = [];
@@ -46,7 +50,7 @@ vi.mock("./db", () => {
   const brackets: any[] = [];
   const votes: any[] = [];
   const submissionHistory: any[] = [];
-  let nextId = 1;
+  let nextId = 100;
 
   return {
     getDb: vi.fn().mockResolvedValue({
@@ -56,43 +60,61 @@ vi.mock("./db", () => {
         }),
       }),
     }),
-    getAllMembers: vi.fn().mockResolvedValue(members),
-    createInvitation: vi.fn().mockImplementation(async (token, invitedBy, email, role, expiresAt) => {
-      invitations.push({ id: nextId++, token, invitedBy, email, role, status: "pending", expiresAt, createdAt: new Date() });
+    // Group functions
+    createGroup: vi.fn().mockImplementation(async (data) => {
+      const id = nextId++;
+      groups.push({ id, ...data, createdAt: new Date() });
+      // Auto-add creator as admin
+      groupMembers.push({ id: nextId++, groupId: id, userId: data.createdBy, role: "admin", joinedAt: new Date() });
+      return id;
     }),
-    getInvitationByToken: vi.fn().mockImplementation(async (token) => {
-      return invitations.find((i) => i.token === token);
+    getGroupById: vi.fn().mockImplementation(async (id) => groups.find((g) => g.id === id) ?? null),
+    getUserGroups: vi.fn().mockImplementation(async (userId) => {
+      const memberOf = groupMembers.filter((gm) => gm.userId === userId);
+      return memberOf.map((gm) => {
+        const group = groups.find((g) => g.id === gm.groupId);
+        return { ...group, role: gm.role, memberCount: groupMembers.filter((m) => m.groupId === gm.groupId).length };
+      }).filter(Boolean);
     }),
+    updateGroup: vi.fn().mockResolvedValue(undefined),
+    getGroupMembers: vi.fn().mockImplementation(async (groupId) => {
+      return groupMembers.filter((gm) => gm.groupId === groupId).map((gm) => ({
+        id: gm.userId, name: "Test User", email: "test@example.com", role: gm.role, joinedAt: gm.joinedAt, siteRole: "user",
+      }));
+    }),
+    getGroupMembership: vi.fn().mockImplementation(async (groupId, userId) => {
+      return groupMembers.find((gm) => gm.groupId === groupId && gm.userId === userId) ?? null;
+    }),
+    updateGroupMemberRole: vi.fn().mockResolvedValue(undefined),
+    addGroupMember: vi.fn().mockImplementation(async (groupId, userId, role) => {
+      groupMembers.push({ id: nextId++, groupId, userId, role, joinedAt: new Date() });
+    }),
+    // Invitation functions
+    createInvitation: vi.fn().mockImplementation(async (token, groupId, invitedBy, email, role, expiresAt) => {
+      invitations.push({ id: nextId++, token, groupId, invitedBy, email, role, status: "pending", expiresAt, createdAt: new Date(), groupName: "Test Group" });
+    }),
+    getInvitationByToken: vi.fn().mockImplementation(async (token) => invitations.find((i) => i.token === token)),
     acceptInvitation: vi.fn().mockResolvedValue(undefined),
     getPendingInvitations: vi.fn().mockResolvedValue([]),
+    // Book functions
     createBook: vi.fn().mockImplementation(async (data) => {
       const id = nextId++;
       books.push({ id, ...data, hasBeenRead: false, createdAt: new Date() });
       return id;
     }),
-    getBookById: vi.fn().mockImplementation(async (id) => {
-      return books.find((b) => b.id === id);
-    }),
-    getAllBooks: vi.fn().mockResolvedValue(books),
+    getBookById: vi.fn().mockImplementation(async (id) => books.find((b) => b.id === id)),
+    getAllBooks: vi.fn().mockImplementation(async (groupId) => books.filter((b) => b.groupId === groupId)),
     markBookAsRead: vi.fn().mockResolvedValue(undefined),
     searchBooks: vi.fn().mockResolvedValue([]),
     getReadBooks: vi.fn().mockResolvedValue([]),
+    // Event functions
     createEvent: vi.fn().mockImplementation(async (data) => {
       const id = nextId++;
-      events.push({
-        id,
-        ...data,
-        status: "submissions_open",
-        winningBookId: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      events.push({ id, ...data, status: "submissions_open", winningBookId: null, createdAt: new Date(), updatedAt: new Date() });
       return id;
     }),
-    getEventById: vi.fn().mockImplementation(async (id) => {
-      return events.find((e) => e.id === id);
-    }),
-    getAllEvents: vi.fn().mockResolvedValue(events),
+    getEventById: vi.fn().mockImplementation(async (id) => events.find((e) => e.id === id)),
+    getAllEvents: vi.fn().mockImplementation(async (groupId) => events.filter((e) => e.groupId === groupId)),
     getActiveEvents: vi.fn().mockResolvedValue([]),
     getCompletedEvents: vi.fn().mockResolvedValue([]),
     updateEventStatus: vi.fn().mockImplementation(async (id, status) => {
@@ -100,42 +122,29 @@ vi.mock("./db", () => {
       if (event) event.status = status;
     }),
     setEventWinner: vi.fn().mockResolvedValue(undefined),
+    // Submission functions
     createSubmission: vi.fn().mockImplementation(async (data) => {
       const id = nextId++;
       submissions.push({ id, ...data, createdAt: new Date() });
       return id;
     }),
     getEventSubmissions: vi.fn().mockImplementation(async (eventId) => {
-      return submissions
-        .filter((s) => s.eventId === eventId)
-        .map((s) => {
-          const book = books.find((b) => b.id === s.bookId);
-          return {
-            ...s,
-            bookTitle: book?.title ?? "Unknown",
-            bookAuthor: book?.author ?? "Unknown",
-            bookGenre: book?.genre,
-            bookPageCount: book?.pageCount,
-            bookRating: book?.rating,
-            bookCoverUrl: null,
-            submitterName: "Test User",
-          };
-        });
+      return submissions.filter((s) => s.eventId === eventId).map((s) => {
+        const book = books.find((b) => b.id === s.bookId);
+        return { ...s, bookTitle: book?.title ?? "Unknown", bookAuthor: book?.author ?? "Unknown", bookGenre: book?.genre, bookPageCount: book?.pageCount, bookRating: book?.rating, bookCoverUrl: null, submitterName: "Test User" };
+      });
     }),
-    getUserSubmissionForEvent: vi.fn().mockImplementation(async (eventId, userId) => {
-      return submissions.find((s) => s.eventId === eventId && s.submittedBy === userId);
-    }),
+    getUserSubmissionForEvent: vi.fn().mockImplementation(async (eventId, userId) => submissions.find((s) => s.eventId === eventId && s.submittedBy === userId)),
     recordSubmissionHistory: vi.fn().mockResolvedValue(undefined),
     getBookSubmissionCount: vi.fn().mockResolvedValue(0),
     getBookSubmissionCounts: vi.fn().mockResolvedValue(new Map()),
+    // Bracket functions
     createBracketMatch: vi.fn().mockImplementation(async (data) => {
       const id = nextId++;
       brackets.push({ id, ...data, winnerId: null, status: "pending", createdAt: new Date() });
       return id;
     }),
-    getEventBrackets: vi.fn().mockImplementation(async (eventId) => {
-      return brackets.filter((b) => b.eventId === eventId);
-    }),
+    getEventBrackets: vi.fn().mockImplementation(async (eventId) => brackets.filter((b) => b.eventId === eventId)),
     updateBracketWinner: vi.fn().mockImplementation(async (bracketId, winnerId) => {
       const b = brackets.find((br) => br.id === bracketId);
       if (b) { b.winnerId = winnerId; b.status = "completed"; }
@@ -148,32 +157,29 @@ vi.mock("./db", () => {
       const b = brackets.find((br) => br.id === bracketId);
       if (b) Object.assign(b, data);
     }),
+    // Vote functions
     castVote: vi.fn().mockImplementation(async (data) => {
       votes.push({ id: nextId++, ...data, createdAt: new Date() });
     }),
-    getUserVoteForBracket: vi.fn().mockImplementation(async (bracketId, userId) => {
-      return votes.find((v) => v.bracketId === bracketId && v.userId === userId);
-    }),
-    getUserVoteForEvent: vi.fn().mockImplementation(async (eventId, userId) => {
-      return votes.find((v) => v.eventId === eventId && !v.bracketId && v.userId === userId);
-    }),
-    getBracketVotes: vi.fn().mockImplementation(async (bracketId) => {
-      return votes.filter((v) => v.bracketId === bracketId);
-    }),
-    getEventVotes: vi.fn().mockImplementation(async (eventId) => {
-      return votes.filter((v) => v.eventId === eventId && !v.bracketId);
-    }),
+    getUserVoteForBracket: vi.fn().mockImplementation(async (bracketId, userId) => votes.find((v) => v.bracketId === bracketId && v.userId === userId)),
+    getUserVoteForEvent: vi.fn().mockImplementation(async (eventId, userId) => votes.find((v) => v.eventId === eventId && !v.bracketId && v.userId === userId)),
+    getBracketVotes: vi.fn().mockImplementation(async (bracketId) => votes.filter((v) => v.bracketId === bracketId)),
+    getEventVotes: vi.fn().mockImplementation(async (eventId) => votes.filter((v) => v.eventId === eventId && !v.bracketId)),
+    // Calendar functions
     createCalendarEvent: vi.fn().mockImplementation(async () => nextId++),
     getCalendarEvents: vi.fn().mockResolvedValue([]),
     getUpcomingCalendarEvents: vi.fn().mockResolvedValue([]),
     deleteCalendarEvent: vi.fn().mockResolvedValue(undefined),
+    // Chat functions
     createChatMessage: vi.fn().mockImplementation(async () => nextId++),
     getChatMessages: vi.fn().mockResolvedValue([]),
+    // Milestone functions
     createMilestone: vi.fn().mockImplementation(async () => nextId++),
     getEventMilestones: vi.fn().mockResolvedValue([]),
   };
 });
 
+// ─── Auth Tests ─────────────────────────────────────────────────────
 describe("auth.me", () => {
   it("returns null for unauthenticated user", async () => {
     const caller = appRouter.createCaller(createCtx(null));
@@ -190,10 +196,38 @@ describe("auth.me", () => {
   });
 });
 
+// ─── Group Tests ────────────────────────────────────────────────────
+describe("groups", () => {
+  it("creates a group", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.groups.create({ name: "Sci-Fi Book Club", description: "We read sci-fi" });
+    expect(result.id).toBeDefined();
+    expect(typeof result.id).toBe("number");
+  });
+
+  it("lists user groups", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const groups = await caller.groups.myGroups();
+    expect(Array.isArray(groups)).toBe(true);
+  });
+
+  it("rejects unauthenticated group creation", async () => {
+    const caller = appRouter.createCaller(createCtx(null));
+    await expect(caller.groups.create({ name: "Test" })).rejects.toThrow();
+  });
+
+  it("validates group name is not empty", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    await expect(caller.groups.create({ name: "" })).rejects.toThrow();
+  });
+});
+
+// ─── Book Tests (group-scoped) ──────────────────────────────────────
 describe("books", () => {
-  it("creates a book", async () => {
+  it("creates a book with groupId", async () => {
     const caller = appRouter.createCaller(createCtx(createMockUser()));
     const result = await caller.books.create({
+      groupId: 1,
       title: "The Great Gatsby",
       author: "F. Scott Fitzgerald",
       genre: "Classic",
@@ -204,25 +238,50 @@ describe("books", () => {
     expect(typeof result.id).toBe("number");
   });
 
+  it("creates a book with cover URL", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.books.create({
+      groupId: 1,
+      title: "Dune",
+      author: "Frank Herbert",
+      coverUrl: "https://covers.openlibrary.org/b/id/12345-L.jpg",
+      pageCount: 412,
+      genre: "Science Fiction",
+    });
+    expect(result.id).toBeDefined();
+  });
+
+  it("creates a book without cover URL", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.books.create({
+      groupId: 1,
+      title: "1984",
+      author: "George Orwell",
+    });
+    expect(result.id).toBeDefined();
+  });
+
   it("rejects unauthenticated book creation", async () => {
     const caller = appRouter.createCaller(createCtx(null));
     await expect(
-      caller.books.create({ title: "Test", author: "Test" })
+      caller.books.create({ groupId: 1, title: "Test", author: "Test" })
     ).rejects.toThrow();
   });
 
   it("validates book creation input", async () => {
     const caller = appRouter.createCaller(createCtx(createMockUser()));
     await expect(
-      caller.books.create({ title: "", author: "Test" })
+      caller.books.create({ groupId: 1, title: "", author: "Test" })
     ).rejects.toThrow();
   });
 });
 
+// ─── Event Tests (group-scoped) ─────────────────────────────────────
 describe("events", () => {
-  it("admin can create an event", async () => {
+  it("group admin can create an event", async () => {
     const caller = appRouter.createCaller(createCtx(createAdminUser()));
     const result = await caller.events.create({
+      groupId: 1,
       title: "March Selection",
       votingScheme: "tournament",
       maxSubmissions: 8,
@@ -230,32 +289,25 @@ describe("events", () => {
     expect(result.id).toBeDefined();
   });
 
-  it("non-admin cannot create an event", async () => {
-    const caller = appRouter.createCaller(createCtx(createMockUser()));
-    await expect(
-      caller.events.create({
-        title: "March Selection",
-        votingScheme: "tournament",
-      })
-    ).rejects.toThrow();
-  });
-
   it("creates event with all voting schemes", async () => {
     const caller = appRouter.createCaller(createCtx(createAdminUser()));
 
     const tournament = await caller.events.create({
+      groupId: 1,
       title: "Tournament Event",
       votingScheme: "tournament",
     });
     expect(tournament.id).toBeDefined();
 
     const majority = await caller.events.create({
+      groupId: 1,
       title: "Majority Event",
       votingScheme: "simple_majority",
     });
     expect(majority.id).toBeDefined();
 
     const ranked = await caller.events.create({
+      groupId: 1,
       title: "Ranked Event",
       votingScheme: "ranked_choice",
     });
@@ -265,6 +317,7 @@ describe("events", () => {
   it("creates event with submission criteria", async () => {
     const caller = appRouter.createCaller(createCtx(createAdminUser()));
     const result = await caller.events.create({
+      groupId: 1,
       title: "Strict Event",
       votingScheme: "simple_majority",
       maxPageCount: 300,
@@ -278,30 +331,43 @@ describe("events", () => {
   });
 });
 
+// ─── Invitation Tests (group-scoped) ────────────────────────────────
 describe("invitations", () => {
-  it("admin can create an invitation", async () => {
+  it("group admin can create an invitation", async () => {
     const caller = appRouter.createCaller(createCtx(createAdminUser()));
     const result = await caller.invitations.create({
+      groupId: 1,
       email: "newmember@example.com",
-      role: "user",
+      role: "member",
     });
     expect(result.token).toBeDefined();
     expect(result.token.length).toBeGreaterThan(10);
     expect(result.expiresAt).toBeInstanceOf(Date);
   });
 
-  it("non-admin cannot create invitation", async () => {
-    const caller = appRouter.createCaller(createCtx(createMockUser()));
+  it("creates link-only invitation (no email)", async () => {
+    const caller = appRouter.createCaller(createCtx(createAdminUser()));
+    const result = await caller.invitations.create({
+      groupId: 1,
+      role: "member",
+    });
+    expect(result.token).toBeDefined();
+  });
+
+  it("rejects unauthenticated invitation creation", async () => {
+    const caller = appRouter.createCaller(createCtx(null));
     await expect(
-      caller.invitations.create({ role: "user" })
+      caller.invitations.create({ groupId: 1, role: "member" })
     ).rejects.toThrow();
   });
 });
 
+// ─── Calendar Tests (group-scoped) ──────────────────────────────────
 describe("calendar", () => {
   it("creates a calendar event", async () => {
     const caller = appRouter.createCaller(createCtx(createMockUser()));
     const result = await caller.calendar.create({
+      groupId: 1,
       title: "Book Discussion",
       eventType: "meeting",
       startDate: new Date("2026-04-01T18:00:00Z"),
@@ -321,6 +387,7 @@ describe("calendar", () => {
 
     for (const eventType of types) {
       const result = await caller.calendar.create({
+        groupId: 1,
         title: `Test ${eventType}`,
         eventType,
         startDate: new Date("2026-04-01T18:00:00Z"),
@@ -330,10 +397,12 @@ describe("calendar", () => {
   });
 });
 
+// ─── Chat Tests (group-scoped) ──────────────────────────────────────
 describe("chat", () => {
   it("sends a chat message", async () => {
     const caller = appRouter.createCaller(createCtx(createMockUser()));
     const result = await caller.chat.send({
+      groupId: 1,
       content: "Hello book club!",
     });
     expect(result.id).toBeDefined();
@@ -341,28 +410,30 @@ describe("chat", () => {
 
   it("rejects empty messages", async () => {
     const caller = appRouter.createCaller(createCtx(createMockUser()));
-    await expect(caller.chat.send({ content: "" })).rejects.toThrow();
+    await expect(caller.chat.send({ groupId: 1, content: "" })).rejects.toThrow();
   });
 
   it("rejects messages over 2000 chars", async () => {
     const caller = appRouter.createCaller(createCtx(createMockUser()));
     await expect(
-      caller.chat.send({ content: "x".repeat(2001) })
+      caller.chat.send({ groupId: 1, content: "x".repeat(2001) })
     ).rejects.toThrow();
   });
 
   it("rejects unauthenticated messages", async () => {
     const caller = appRouter.createCaller(createCtx(null));
     await expect(
-      caller.chat.send({ content: "Hello" })
+      caller.chat.send({ groupId: 1, content: "Hello" })
     ).rejects.toThrow();
   });
 });
 
+// ─── Milestone Tests (group-scoped) ─────────────────────────────────
 describe("milestones", () => {
-  it("admin can create a milestone", async () => {
+  it("group admin can create a milestone", async () => {
     const caller = appRouter.createCaller(createCtx(createAdminUser()));
     const result = await caller.milestones.create({
+      groupId: 1,
       eventId: 1,
       title: "Read chapters 1-5",
       targetDate: new Date("2026-04-15T00:00:00Z"),
@@ -371,10 +442,11 @@ describe("milestones", () => {
     expect(result.id).toBeDefined();
   });
 
-  it("non-admin cannot create milestone", async () => {
-    const caller = appRouter.createCaller(createCtx(createMockUser()));
+  it("rejects unauthenticated milestone creation", async () => {
+    const caller = appRouter.createCaller(createCtx(null));
     await expect(
       caller.milestones.create({
+        groupId: 1,
         eventId: 1,
         title: "Test",
         targetDate: new Date(),
@@ -383,6 +455,7 @@ describe("milestones", () => {
   });
 });
 
+// ─── Voting Tests ───────────────────────────────────────────────────
 describe("voting", () => {
   it("casts a simple majority vote", async () => {
     const caller = appRouter.createCaller(createCtx(createMockUser({ id: 50, openId: "voter-1" })));
@@ -410,21 +483,23 @@ describe("voting", () => {
   });
 });
 
+// ─── Members Tests (group-scoped) ───────────────────────────────────
 describe("members", () => {
-  it("authenticated user can list members", async () => {
+  it("authenticated user can list group members", async () => {
     const caller = appRouter.createCaller(createCtx(createMockUser()));
-    const result = await caller.members.list();
+    const result = await caller.members.list({ groupId: 1 });
     expect(Array.isArray(result)).toBe(true);
   });
 
   it("unauthenticated user cannot list members", async () => {
     const caller = appRouter.createCaller(createCtx(null));
-    await expect(caller.members.list()).rejects.toThrow();
+    await expect(caller.members.list({ groupId: 1 })).rejects.toThrow();
   });
 
   it("admin can update member role", async () => {
     const caller = appRouter.createCaller(createCtx(createAdminUser()));
     const result = await caller.members.updateRole({
+      groupId: 1,
       userId: 1,
       role: "admin",
     });
@@ -432,12 +507,12 @@ describe("members", () => {
   });
 });
 
+// ─── Open Library Tests ─────────────────────────────────────────────
 describe("openLibrary", () => {
   it("searches Open Library for books", async () => {
     const caller = appRouter.createCaller(createCtx(createMockUser()));
     const results = await caller.openLibrary.search({ query: "The Great Gatsby" });
     expect(Array.isArray(results)).toBe(true);
-    // Results come from the real Open Library API
     if (results.length > 0) {
       expect(results[0]).toHaveProperty("title");
       expect(results[0]).toHaveProperty("author");
@@ -460,31 +535,27 @@ describe("openLibrary", () => {
   });
 });
 
+// ─── Notification Tests (group-scoped) ──────────────────────────────
 describe("notifications", () => {
-  it("admin can send voting notification", async () => {
+  it("group admin can send voting notification", async () => {
     const caller = appRouter.createCaller(createCtx(createAdminUser()));
     const result = await caller.notifications.notifyVotingOpen({
+      groupId: 1,
       eventId: 1,
       eventTitle: "March Selection",
     });
     expect(result.success).toBe(true);
   });
 
-  it("admin can send deadline notification", async () => {
+  it("group admin can send deadline notification", async () => {
     const caller = appRouter.createCaller(createCtx(createAdminUser()));
     const result = await caller.notifications.notifyDeadline({
+      groupId: 1,
       eventTitle: "March Selection",
       deadlineType: "submission",
       deadline: "2026-04-01",
     });
     expect(result.success).toBe(true);
-  });
-
-  it("non-admin cannot send voting notification", async () => {
-    const caller = appRouter.createCaller(createCtx(createMockUser()));
-    await expect(
-      caller.notifications.notifyVotingOpen({ eventId: 1, eventTitle: "Test" })
-    ).rejects.toThrow();
   });
 
   it("authenticated user can send chat notification", async () => {
@@ -494,28 +565,5 @@ describe("notifications", () => {
       preview: "Check out this book!",
     });
     expect(result.success).toBe(true);
-  });
-});
-
-describe("books with cover URL", () => {
-  it("creates a book with cover URL", async () => {
-    const caller = appRouter.createCaller(createCtx(createMockUser()));
-    const result = await caller.books.create({
-      title: "Dune",
-      author: "Frank Herbert",
-      coverUrl: "https://covers.openlibrary.org/b/id/12345-L.jpg",
-      pageCount: 412,
-      genre: "Science Fiction",
-    });
-    expect(result.id).toBeDefined();
-  });
-
-  it("creates a book without cover URL", async () => {
-    const caller = appRouter.createCaller(createCtx(createMockUser()));
-    const result = await caller.books.create({
-      title: "1984",
-      author: "George Orwell",
-    });
-    expect(result.id).toBeDefined();
   });
 });

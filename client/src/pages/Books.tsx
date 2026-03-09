@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useGroup } from "@/contexts/GroupContext";
 import { trpc } from "@/lib/trpc";
 import { BookOpen, Search } from "lucide-react";
 import { useState } from "react";
@@ -27,10 +28,25 @@ function BookCover({ coverUrl, title }: { coverUrl?: string | null; title: strin
 }
 
 export default function BooksPage() {
+  const { activeGroup } = useGroup();
   const [searchQuery, setSearchQuery] = useState("");
-  const { data: allBooks, isLoading } = trpc.books.list.useQuery();
-  const { data: readBooks, isLoading: readLoading } =
-    trpc.books.readBooks.useQuery();
+  const { data: allBooks, isLoading } = trpc.books.list.useQuery(
+    { groupId: activeGroup?.id ?? 0 },
+    { enabled: !!activeGroup }
+  );
+  const { data: readBooks, isLoading: readLoading } = trpc.books.readBooks.useQuery(
+    { groupId: activeGroup?.id ?? 0 },
+    { enabled: !!activeGroup }
+  );
+
+  if (!activeGroup) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        <BookOpen className="h-12 w-12 mx-auto mb-3 opacity-40" />
+        <p>Select a group to view books</p>
+      </div>
+    );
+  }
 
   const filteredBooks = allBooks?.filter(
     (b) =>
@@ -77,7 +93,7 @@ export default function BooksPage() {
       <div>
         <h1 className="text-2xl font-serif font-bold">Books</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          All books submitted to the club
+          All books submitted to {activeGroup.name}
         </p>
       </div>
 

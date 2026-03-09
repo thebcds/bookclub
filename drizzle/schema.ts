@@ -26,13 +26,33 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+// ─── Groups (Book Clubs) ────────────────────────────────────────────
+export const groups = mysqlTable("groups", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 256 }).notNull(),
+  description: text("description"),
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// ─── Group Members ──────────────────────────────────────────────────
+export const groupMembers = mysqlTable("groupMembers", {
+  id: int("id").autoincrement().primaryKey(),
+  groupId: int("groupId").notNull(),
+  userId: int("userId").notNull(),
+  role: mysqlEnum("role", ["admin", "member"]).default("member").notNull(),
+  joinedAt: timestamp("joinedAt").defaultNow().notNull(),
+});
+
 // ─── Invitations ─────────────────────────────────────────────────────
 export const invitations = mysqlTable("invitations", {
   id: int("id").autoincrement().primaryKey(),
+  groupId: int("groupId").notNull(),
   token: varchar("token", { length: 64 }).notNull().unique(),
   invitedBy: int("invitedBy").notNull(),
   email: varchar("email", { length: 320 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  role: mysqlEnum("role", ["member", "admin"]).default("member").notNull(),
   status: mysqlEnum("status", ["pending", "accepted", "expired"])
     .default("pending")
     .notNull(),
@@ -41,15 +61,16 @@ export const invitations = mysqlTable("invitations", {
   expiresAt: timestamp("expiresAt").notNull(),
 });
 
-// ─── Books (master catalog) ─────────────────────────────────────────
+// ─── Books (per-group catalog) ──────────────────────────────────────
 export const books = mysqlTable("books", {
   id: int("id").autoincrement().primaryKey(),
+  groupId: int("groupId").notNull(),
   title: varchar("title", { length: 512 }).notNull(),
   author: varchar("author", { length: 512 }).notNull(),
   genre: varchar("genre", { length: 128 }),
   pageCount: int("pageCount"),
   coverUrl: text("coverUrl"),
-  rating: int("rating"), // 1-100 scale for critical rating
+  rating: int("rating"),
   isbn: varchar("isbn", { length: 20 }),
   description: text("description"),
   hasBeenRead: boolean("hasBeenRead").default(false).notNull(),
@@ -57,9 +78,10 @@ export const books = mysqlTable("books", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
-// ─── Events (selection rounds) ──────────────────────────────────────
+// ─── Events (selection rounds, per-group) ───────────────────────────
 export const events = mysqlTable("events", {
   id: int("id").autoincrement().primaryKey(),
+  groupId: int("groupId").notNull(),
   title: varchar("title", { length: 256 }).notNull(),
   description: text("description"),
   votingScheme: mysqlEnum("votingScheme", [
@@ -75,18 +97,15 @@ export const events = mysqlTable("events", {
   ])
     .default("submissions_open")
     .notNull(),
-  // Submission parameters
   maxPageCount: int("maxPageCount"),
   allowPreviouslyRead: boolean("allowPreviouslyRead").default(false).notNull(),
-  allowedGenres: json("allowedGenres"), // string[] or null for any
+  allowedGenres: json("allowedGenres"),
   minRating: int("minRating"),
   anonymousSubmissions: boolean("anonymousSubmissions").default(false).notNull(),
   maxSubmissions: int("maxSubmissions").default(8).notNull(),
-  // Dates
   submissionDeadline: timestamp("submissionDeadline"),
   votingDeadline: timestamp("votingDeadline"),
   readingDeadline: timestamp("readingDeadline"),
-  // Winner
   winningBookId: int("winningBookId"),
   createdBy: int("createdBy").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -107,10 +126,9 @@ export const submissions = mysqlTable("submissions", {
 export const brackets = mysqlTable("brackets", {
   id: int("id").autoincrement().primaryKey(),
   eventId: int("eventId").notNull(),
-  // conference A or B
   conference: mysqlEnum("conference", ["A", "B"]).notNull(),
-  round: int("round").notNull(), // 1 = first round, 2 = semis, 3 = finals
-  matchOrder: int("matchOrder").notNull(), // position within the round
+  round: int("round").notNull(),
+  matchOrder: int("matchOrder").notNull(),
   book1Id: int("book1Id"),
   book2Id: int("book2Id"),
   book1Seed: int("book1Seed"),
@@ -126,16 +144,17 @@ export const brackets = mysqlTable("brackets", {
 export const votes = mysqlTable("votes", {
   id: int("id").autoincrement().primaryKey(),
   eventId: int("eventId").notNull(),
-  bracketId: int("bracketId"), // for tournament voting
+  bracketId: int("bracketId"),
   userId: int("userId").notNull(),
-  bookId: int("bookId").notNull(), // the book voted for (or top choice)
-  rankings: json("rankings"), // for ranked choice: [bookId, bookId, ...]
+  bookId: int("bookId").notNull(),
+  rankings: json("rankings"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 // ─── Calendar Events ────────────────────────────────────────────────
 export const calendarEvents = mysqlTable("calendarEvents", {
   id: int("id").autoincrement().primaryKey(),
+  groupId: int("groupId").notNull(),
   title: varchar("title", { length: 256 }).notNull(),
   description: text("description"),
   eventType: mysqlEnum("eventType", [
@@ -147,7 +166,7 @@ export const calendarEvents = mysqlTable("calendarEvents", {
   ]).notNull(),
   startDate: timestamp("startDate").notNull(),
   endDate: timestamp("endDate"),
-  relatedEventId: int("relatedEventId"), // link to selection event
+  relatedEventId: int("relatedEventId"),
   createdBy: int("createdBy").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
@@ -155,9 +174,10 @@ export const calendarEvents = mysqlTable("calendarEvents", {
 // ─── Chat Messages ──────────────────────────────────────────────────
 export const chatMessages = mysqlTable("chatMessages", {
   id: int("id").autoincrement().primaryKey(),
+  groupId: int("groupId").notNull(),
   userId: int("userId").notNull(),
   content: text("content").notNull(),
-  eventId: int("eventId"), // optional: scoped to an event
+  eventId: int("eventId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -183,13 +203,30 @@ export const readingMilestones = mysqlTable("readingMilestones", {
 });
 
 // ─── Relations ──────────────────────────────────────────────────────
+export const groupsRelations = relations(groups, ({ many, one }) => ({
+  members: many(groupMembers),
+  books: many(books),
+  events: many(events),
+  calendarEvents: many(calendarEvents),
+  chatMessages: many(chatMessages),
+  invitations: many(invitations),
+  creator: one(users, { fields: [groups.createdBy], references: [users.id] }),
+}));
+
+export const groupMembersRelations = relations(groupMembers, ({ one }) => ({
+  group: one(groups, { fields: [groupMembers.groupId], references: [groups.id] }),
+  user: one(users, { fields: [groupMembers.userId], references: [users.id] }),
+}));
+
 export const usersRelations = relations(users, ({ many }) => ({
+  groupMemberships: many(groupMembers),
   submissions: many(submissions),
   votes: many(votes),
   chatMessages: many(chatMessages),
 }));
 
 export const eventsRelations = relations(events, ({ many, one }) => ({
+  group: one(groups, { fields: [events.groupId], references: [groups.id] }),
   submissions: many(submissions),
   brackets: many(brackets),
   votes: many(votes),
@@ -203,15 +240,9 @@ export const eventsRelations = relations(events, ({ many, one }) => ({
 }));
 
 export const submissionsRelations = relations(submissions, ({ one }) => ({
-  event: one(events, {
-    fields: [submissions.eventId],
-    references: [events.id],
-  }),
+  event: one(events, { fields: [submissions.eventId], references: [events.id] }),
   book: one(books, { fields: [submissions.bookId], references: [books.id] }),
-  submitter: one(users, {
-    fields: [submissions.submittedBy],
-    references: [users.id],
-  }),
+  submitter: one(users, { fields: [submissions.submittedBy], references: [users.id] }),
 }));
 
 export const bracketsRelations = relations(brackets, ({ one, many }) => ({
@@ -224,14 +255,20 @@ export const bracketsRelations = relations(brackets, ({ one, many }) => ({
 
 export const votesRelations = relations(votes, ({ one }) => ({
   event: one(events, { fields: [votes.eventId], references: [events.id] }),
-  bracket: one(brackets, {
-    fields: [votes.bracketId],
-    references: [brackets.id],
-  }),
+  bracket: one(brackets, { fields: [votes.bracketId], references: [brackets.id] }),
   user: one(users, { fields: [votes.userId], references: [users.id] }),
   book: one(books, { fields: [votes.bookId], references: [books.id] }),
 }));
 
 export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
+  group: one(groups, { fields: [chatMessages.groupId], references: [groups.id] }),
   user: one(users, { fields: [chatMessages.userId], references: [users.id] }),
+}));
+
+export const booksRelations = relations(books, ({ one }) => ({
+  group: one(groups, { fields: [books.groupId], references: [groups.id] }),
+}));
+
+export const invitationsRelations = relations(invitations, ({ one }) => ({
+  group: one(groups, { fields: [invitations.groupId], references: [groups.id] }),
 }));

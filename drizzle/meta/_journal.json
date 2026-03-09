@@ -15,6 +15,13 @@
       "when": 1773070487164,
       "tag": "0001_mixed_silver_samurai",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1773075067403,
+      "tag": "0002_curious_whirlwind",
+      "breakpoints": true
     }
   ]
 }

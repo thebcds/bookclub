@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useGroup } from "@/contexts/GroupContext";
 import { trpc } from "@/lib/trpc";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { useState } from "react";
@@ -37,6 +38,7 @@ const GENRES = [
 
 export default function NewEventPage() {
   const [, setLocation] = useLocation();
+  const { activeGroup } = useGroup();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [votingScheme, setVotingScheme] = useState<
@@ -66,7 +68,9 @@ export default function NewEventPage() {
       toast.error("Title is required");
       return;
     }
+    if (!activeGroup) return;
     createEvent.mutate({
+      groupId: activeGroup.id,
       title: title.trim(),
       description: description.trim() || undefined,
       votingScheme,

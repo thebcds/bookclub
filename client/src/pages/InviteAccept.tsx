@@ -93,10 +93,10 @@ export default function InviteAcceptPage() {
             <BookOpen className="h-6 w-6 text-primary" />
           </div>
           <h2 className="text-xl font-serif font-bold">
-            Join the Book Club
+            Join {verification.invitation?.groupName || "the Book Club"}
           </h2>
           <p className="text-muted-foreground text-sm">
-            You&apos;ve been invited to join the book club. Click below to
+            You&apos;ve been invited to join {verification.invitation?.groupName || "the book club"}. Click below to
             accept.
           </p>
           <Button

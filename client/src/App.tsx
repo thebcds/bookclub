@@ -4,6 +4,7 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import DashboardLayout from "./components/DashboardLayout";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { GroupProvider } from "./contexts/GroupContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import BooksPage from "./pages/Books";
 import CalendarPage from "./pages/Calendar";
@@ -17,19 +18,21 @@ import NewEventPage from "./pages/NewEvent";
 
 function DashboardRouter() {
   return (
-    <DashboardLayout>
-      <Switch>
-        <Route path="/" component={Home} />
-        <Route path="/events" component={EventsPage} />
-        <Route path="/events/new" component={NewEventPage} />
-        <Route path="/events/:id" component={EventDetailPage} />
-        <Route path="/books" component={BooksPage} />
-        <Route path="/calendar" component={CalendarPage} />
-        <Route path="/chat" component={ChatPage} />
-        <Route path="/members" component={MembersPage} />
-        <Route component={NotFound} />
-      </Switch>
-    </DashboardLayout>
+    <GroupProvider>
+      <DashboardLayout>
+        <Switch>
+          <Route path="/" component={Home} />
+          <Route path="/events" component={EventsPage} />
+          <Route path="/events/new" component={NewEventPage} />
+          <Route path="/events/:id" component={EventDetailPage} />
+          <Route path="/books" component={BooksPage} />
+          <Route path="/calendar" component={CalendarPage} />
+          <Route path="/chat" component={ChatPage} />
+          <Route path="/members" component={MembersPage} />
+          <Route component={NotFound} />
+        </Switch>
+      </DashboardLayout>
+    </GroupProvider>
   );
 }
 

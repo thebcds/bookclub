@@ -1,4 +1,3 @@
-import { useAuth } from "@/_core/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,18 +19,33 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useGroup } from "@/contexts/GroupContext";
 import { trpc } from "@/lib/trpc";
 import { Check, Copy, Loader2, Plus, Shield, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 export default function MembersPage() {
-  const { user } = useAuth();
-  const { data: members, isLoading } = trpc.members.list.useQuery();
-  const { data: invitations } = trpc.invitations.list.useQuery(undefined, {
-    enabled: user?.role === "admin",
-  });
+  const { activeGroup, isGroupAdmin } = useGroup();
+  const gid = activeGroup?.id ?? 0;
+  const { data: members, isLoading } = trpc.members.list.useQuery(
+    { groupId: gid },
+    { enabled: !!activeGroup }
+  );
+  const { data: invitations } = trpc.invitations.list.useQuery(
+    { groupId: gid },
+    { enabled: !!activeGroup && isGroupAdmin }
+  );
   const [showInvite, setShowInvite] = useState(false);
+
+  if (!activeGroup) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        <Users className="h-12 w-12 mx-auto mb-3 opacity-40" />
+        <p>Select a group to view members</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -39,10 +53,10 @@ export default function MembersPage() {
         <div>
           <h1 className="text-2xl font-serif font-bold">Members</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Club members and invitations
+            {activeGroup.name} members and invitations
           </p>
         </div>
-        {user?.role === "admin" && (
+        {isGroupAdmin && (
           <Dialog open={showInvite} onOpenChange={setShowInvite}>
             <DialogTrigger asChild>
               <Button>
@@ -55,6 +69,7 @@ export default function MembersPage() {
                 <DialogTitle>Invite a Member</DialogTitle>
               </DialogHeader>
               <InviteForm
+                groupId={gid}
                 onSuccess={() => setShowInvite(false)}
               />
             </DialogContent>
@@ -95,7 +110,7 @@ export default function MembersPage() {
                   )}
                   <span className="text-xs text-muted-foreground">
                     Joined{" "}
-                    {new Date(member.createdAt).toLocaleDateString()}
+                    {new Date(member.joinedAt).toLocaleDateString()}
                   </span>
                 </div>
               </CardContent>
@@ -105,7 +120,7 @@ export default function MembersPage() {
       )}
 
       {/* Pending Invitations */}
-      {user?.role === "admin" && invitations && invitations.length > 0 && (
+      {isGroupAdmin && invitations && invitations.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Pending Invitations</CardTitle>
@@ -137,9 +152,9 @@ export default function MembersPage() {
   );
 }
 
-function InviteForm({ onSuccess }: { onSuccess: () => void }) {
+function InviteForm({ groupId, onSuccess }: { groupId: number; onSuccess: () => void }) {
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"user" | "admin">("user");
+  const [role, setRole] = useState<"member" | "admin">("member");
   const [inviteLink, setInviteLink] = useState("");
   const [copied, setCopied] = useState(false);
   const utils = trpc.useUtils();
@@ -149,7 +164,7 @@ function InviteForm({ onSuccess }: { onSuccess: () => void }) {
       const link = `${window.location.origin}/invite/${data.token}`;
       setInviteLink(link);
       toast.success("Invitation created!");
-      utils.invitations.list.invalidate();
+      utils.invitations.list.invalidate({ groupId });
     },
     onError: (err) => toast.error(err.message),
   });
@@ -157,6 +172,7 @@ function InviteForm({ onSuccess }: { onSuccess: () => void }) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     createInvite.mutate({
+      groupId,
       email: email.trim() || undefined,
       role,
     });
@@ -213,13 +229,13 @@ function InviteForm({ onSuccess }: { onSuccess: () => void }) {
         <Label>Role</Label>
         <Select
           value={role}
-          onValueChange={(v) => setRole(v as "user" | "admin")}
+          onValueChange={(v) => setRole(v as "member" | "admin")}
         >
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="user">Member</SelectItem>
+            <SelectItem value="member">Member</SelectItem>
             <SelectItem value="admin">Admin</SelectItem>
           </SelectContent>
         </Select>

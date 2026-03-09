@@ -24,12 +24,13 @@ type BracketMatch = {
 
 type Props = {
   eventId: number;
+  groupId: number;
   brackets: BracketMatch[];
   eventStatus: string;
   isAdmin: boolean;
 };
 
-export default function BracketTree({ eventId, brackets, eventStatus, isAdmin }: Props) {
+export default function BracketTree({ eventId, groupId, brackets, eventStatus, isAdmin }: Props) {
   const utils = trpc.useUtils();
 
   const voteMutation = trpc.brackets.vote.useMutation({
@@ -110,7 +111,7 @@ export default function BracketTree({ eventId, brackets, eventStatus, isAdmin }:
                     voteMutation.mutate({ bracketId, bookId, eventId })
                   }
                   onResolve={(bracketId) =>
-                    resolveMutation.mutate({ bracketId, eventId })
+                    resolveMutation.mutate({ groupId, bracketId, eventId })
                   }
                   isVoting={voteMutation.isPending}
                   isResolving={resolveMutation.isPending}
@@ -140,7 +141,7 @@ export default function BracketTree({ eventId, brackets, eventStatus, isAdmin }:
                 voteMutation.mutate({ bracketId: finalMatch.id, bookId, eventId })
               }
               onResolve={() =>
-                resolveMutation.mutate({ bracketId: finalMatch.id, eventId })
+                resolveMutation.mutate({ groupId, bracketId: finalMatch.id, eventId })
               }
               isVoting={voteMutation.isPending}
               isResolving={resolveMutation.isPending}
@@ -173,7 +174,7 @@ export default function BracketTree({ eventId, brackets, eventStatus, isAdmin }:
                     voteMutation.mutate({ bracketId, bookId, eventId })
                   }
                   onResolve={(bracketId) =>
-                    resolveMutation.mutate({ bracketId, eventId })
+                    resolveMutation.mutate({ groupId, bracketId, eventId })
                   }
                   isVoting={voteMutation.isPending}
                   isResolving={resolveMutation.isPending}

@@ -3,28 +3,30 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useGroup } from "@/contexts/GroupContext";
 import { trpc } from "@/lib/trpc";
 import { Loader2, MessageCircle, Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 export default function ChatPage() {
   const { user } = useAuth();
+  const { activeGroup } = useGroup();
+  const gid = activeGroup?.id ?? 0;
   const [message, setMessage] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const utils = trpc.useUtils();
 
   const { data: messages, isLoading } = trpc.chat.messages.useQuery(
-    { limit: 100 },
-    { refetchInterval: 5000 }
+    { groupId: gid, limit: 100 },
+    { refetchInterval: 5000, enabled: !!activeGroup }
   );
 
   const sendMessage = trpc.chat.send.useMutation({
     onSuccess: () => {
       setMessage("");
-      utils.chat.messages.invalidate();
+      utils.chat.messages.invalidate({ groupId: gid });
       inputRef.current?.focus();
     },
     onError: (err) => {
@@ -42,8 +44,8 @@ export default function ChatPage() {
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim()) return;
-    sendMessage.mutate({ content: message.trim() });
+    if (!message.trim() || !activeGroup) return;
+    sendMessage.mutate({ groupId: gid, content: message.trim() });
   };
 
   // Reverse messages for display (newest at bottom)
@@ -70,12 +72,21 @@ export default function ChatPage() {
     );
   };
 
+  if (!activeGroup) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        <MessageCircle className="h-12 w-12 mx-auto mb-3 opacity-40" />
+        <p>Select a group to start chatting</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
       <div className="mb-4">
         <h1 className="text-2xl font-serif font-bold">Chat</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Discuss books, share links, and connect with club members
+          Discuss books, share links, and connect with {activeGroup.name} members
         </p>
       </div>
 
@@ -83,7 +94,7 @@ export default function ChatPage() {
         <CardHeader className="pb-3 border-b shrink-0">
           <CardTitle className="text-base flex items-center gap-2">
             <MessageCircle className="h-4 w-4" />
-            General Discussion
+            {activeGroup.name} Discussion
           </CardTitle>
         </CardHeader>
         <CardContent className="flex-1 p-0 flex flex-col overflow-hidden">

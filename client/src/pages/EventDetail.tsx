@@ -1,4 +1,3 @@
-import { useAuth } from "@/_core/hooks/useAuth";
 import BracketTree from "@/components/BracketTree";
 import OpenLibrarySearch from "@/components/OpenLibrarySearch";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useGroup } from "@/contexts/GroupContext";
 import { trpc } from "@/lib/trpc";
 import {
   ArrowLeft,
@@ -35,7 +35,7 @@ import { useLocation, useParams } from "wouter";
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
   const eventId = parseInt(id);
-  const { user } = useAuth();
+  const { activeGroup, isGroupAdmin } = useGroup();
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
 
@@ -72,6 +72,8 @@ export default function EventDetailPage() {
     },
     onError: (err) => toast.error(err.message),
   });
+
+  const gid = activeGroup?.id;
 
   if (isLoading) {
     return (
@@ -125,9 +127,9 @@ export default function EventDetailPage() {
             </Badge>
           </div>
         </div>
-        {user?.role === "admin" && event.status === "submissions_open" && (
+        {isGroupAdmin && event.status === "submissions_open" && (
           <Button
-            onClick={() => startVoting.mutate({ eventId })}
+            onClick={() => startVoting.mutate({ groupId: gid!, eventId })}
             disabled={startVoting.isPending}
           >
             {startVoting.isPending ? (
@@ -138,11 +140,11 @@ export default function EventDetailPage() {
             Start Voting
           </Button>
         )}
-        {user?.role === "admin" &&
+        {isGroupAdmin &&
           event.status === "voting" &&
           event.votingScheme !== "tournament" && (
             <Button
-              onClick={() => resolveVoting.mutate({ eventId })}
+              onClick={() => resolveVoting.mutate({ groupId: gid!, eventId })}
               disabled={resolveVoting.isPending}
             >
               {resolveVoting.isPending ? (
@@ -260,13 +262,15 @@ export default function EventDetailPage() {
           {event.votingScheme === "tournament" ? (
             <BracketTree
               eventId={eventId}
+              groupId={gid!}
               brackets={bracketData ?? []}
               eventStatus={event.status}
-              isAdmin={user?.role === "admin"}
+              isAdmin={isGroupAdmin}
             />
           ) : (
             <VotingView
               eventId={eventId}
+              groupId={gid!}
               event={event}
               subs={subs ?? []}
               myVote={myVote}
@@ -341,6 +345,7 @@ function SubmissionsTab({
             </DialogHeader>
             <SubmitBookForm
               eventId={eventId}
+              groupId={event.groupId}
               onSuccess={() => {
                 setShowAddBook(false);
                 utils.submissions.listForEvent.invalidate({ eventId });
@@ -405,9 +410,11 @@ function SubmissionsTab({
 
 function SubmitBookForm({
   eventId,
+  groupId,
   onSuccess,
 }: {
   eventId: number;
+  groupId: number;
   onSuccess: () => void;
 }) {
   const [title, setTitle] = useState("");
@@ -456,6 +463,7 @@ function SubmitBookForm({
     }
     try {
       const book = await createBook.mutateAsync({
+        groupId,
         title: title.trim(),
         author: author.trim(),
         genre: genre || undefined,
@@ -466,6 +474,7 @@ function SubmitBookForm({
         isbn: isbn || undefined,
       });
       await submitBook.mutateAsync({
+        groupId,
         eventId,
         bookId: book.id,
         isAnonymous,
@@ -569,12 +578,14 @@ function SubmitBookForm({
 
 function VotingView({
   eventId,
+  groupId,
   event,
   subs,
   myVote,
   results,
 }: {
   eventId: number;
+  groupId: number;
   event: any;
   subs: any[];
   myVote: any;

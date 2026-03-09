@@ -1,7 +1,6 @@
-import { useAuth } from "@/_core/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { useGroup } from "@/contexts/GroupContext";
 import { trpc } from "@/lib/trpc";
 import {
   Calendar as CalIcon,
@@ -94,15 +94,20 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
 };
 
 export default function CalendarPage() {
-  const { user } = useAuth();
-  const { data: calEvents, isLoading } = trpc.calendar.list.useQuery();
+  const { activeGroup, isGroupAdmin } = useGroup();
+  const gid = activeGroup?.id ?? 0;
+  const { data: calEvents, isLoading } = trpc.calendar.list.useQuery(
+    { groupId: gid },
+    { enabled: !!activeGroup }
+  );
   const [showAdd, setShowAdd] = useState(false);
   const utils = trpc.useUtils();
 
   const deleteMutation = trpc.calendar.delete.useMutation({
     onSuccess: () => {
       toast.success("Event deleted");
-      utils.calendar.list.invalidate();
+      utils.calendar.list.invalidate({ groupId: gid });
+      utils.calendar.upcoming.invalidate({ groupId: gid });
     },
     onError: (err) => toast.error(err.message),
   });
@@ -114,10 +119,6 @@ export default function CalendarPage() {
     for (const evt of calEvents) {
       const d = new Date(evt.startDate);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const label = d.toLocaleDateString("en-US", {
-        month: "long",
-        year: "numeric",
-      });
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(evt);
     }
@@ -132,6 +133,15 @@ export default function CalendarPage() {
       events,
     }));
   }, [calEvents]);
+
+  if (!activeGroup) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        <CalIcon className="h-12 w-12 mx-auto mb-3 opacity-40" />
+        <p>Select a group to view calendar</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -151,7 +161,7 @@ export default function CalendarPage() {
             <Download className="h-4 w-4 mr-2" />
             Export ICS
           </Button>
-          {user?.role === "admin" && (
+          {isGroupAdmin && (
             <Dialog open={showAdd} onOpenChange={setShowAdd}>
               <DialogTrigger asChild>
                 <Button>
@@ -164,10 +174,11 @@ export default function CalendarPage() {
                   <DialogTitle>Add Calendar Event</DialogTitle>
                 </DialogHeader>
                 <AddCalendarEventForm
+                  groupId={gid}
                   onSuccess={() => {
                     setShowAdd(false);
-                    utils.calendar.list.invalidate();
-                    utils.calendar.upcoming.invalidate();
+                    utils.calendar.list.invalidate({ groupId: gid });
+                    utils.calendar.upcoming.invalidate({ groupId: gid });
                   }}
                 />
               </DialogContent>
@@ -223,12 +234,12 @@ export default function CalendarPage() {
                           {EVENT_TYPE_LABELS[evt.eventType] ?? evt.eventType}
                         </Badge>
                       </div>
-                      {user?.role === "admin" && (
+                      {isGroupAdmin && (
                         <Button
                           variant="ghost"
                           size="icon"
                           className="shrink-0 text-muted-foreground hover:text-destructive"
-                          onClick={() => deleteMutation.mutate({ id: evt.id })}
+                          onClick={() => deleteMutation.mutate({ groupId: gid, id: evt.id })}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -244,7 +255,7 @@ export default function CalendarPage() {
         <div className="text-center py-12 text-muted-foreground">
           <CalIcon className="h-12 w-12 mx-auto mb-3 opacity-40" />
           <p>No calendar events yet</p>
-          {user?.role === "admin" && (
+          {isGroupAdmin && (
             <Button
               variant="outline"
               className="mt-4"
@@ -259,7 +270,7 @@ export default function CalendarPage() {
   );
 }
 
-function AddCalendarEventForm({ onSuccess }: { onSuccess: () => void }) {
+function AddCalendarEventForm({ groupId, onSuccess }: { groupId: number; onSuccess: () => void }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [eventType, setEventType] = useState<string>("meeting");
@@ -281,6 +292,7 @@ function AddCalendarEventForm({ onSuccess }: { onSuccess: () => void }) {
       return;
     }
     createEvent.mutate({
+      groupId,
       title: title.trim(),
       description: description.trim() || undefined,
       eventType: eventType as any,
