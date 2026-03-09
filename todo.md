@@ -60,3 +60,6 @@
 - [x] Visual bracket tree layout with conference columns, VS dividers, and champion final
 - [x] Open Library search component with cover preview in submission form
 - [x] New tests for Open Library, notifications, and cover URL features
+
+## Bugs
+- [x] Preview not loading - fixed by clearing zombie processes and restarting server on port 3000
