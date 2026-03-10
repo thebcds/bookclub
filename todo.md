@@ -79,3 +79,6 @@
 - [x] All existing pages scoped to selected group
 - [x] Tests for group-scoped operations (38 passing)
 - [x] Fix: `<p>` cannot contain nested `<div>` error on Home page (/)
+- [x] Fix: voting.myVote query returns undefined instead of null
+- [x] Fix: submissions.mySubmission query returns undefined instead of null
+- [x] Fix: "Need at least 2 submissions" error - improved message clarity

@@ -266,7 +266,7 @@ export const appRouter = router({
         if (!event) throw new TRPCError({ code: "NOT_FOUND" });
         if (event.status !== "submissions_open") throw new TRPCError({ code: "BAD_REQUEST", message: "Event is not in submissions phase" });
         const subs = await db.getEventSubmissions(input.eventId);
-        if (subs.length < 2) throw new TRPCError({ code: "BAD_REQUEST", message: "Need at least 2 submissions" });
+        if (subs.length < 2) throw new TRPCError({ code: "BAD_REQUEST", message: `Cannot start voting with only ${subs.length} submission${subs.length === 1 ? '' : 's'}. At least 2 book submissions are required.` });
         if (event.votingScheme === "tournament") await generateTournamentBracket(input.eventId, subs);
         await db.updateEventStatus(input.eventId, "voting");
         try { await notifyOwner({ title: `Voting Now Open: ${event.title}`, content: `The voting round for "${event.title}" has started with ${subs.length} book submissions.` }); } catch {}

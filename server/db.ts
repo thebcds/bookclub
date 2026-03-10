@@ -284,9 +284,9 @@ export async function getEventSubmissions(eventId: number) {
 
 export async function getUserSubmissionForEvent(eventId: number, userId: number) {
   const db = await getDb();
-  if (!db) return undefined;
+  if (!db) return null;
   const result = await db.select().from(submissions).where(and(eq(submissions.eventId, eventId), eq(submissions.submittedBy, userId))).limit(1);
-  return result[0] ?? undefined;
+  return result[0] ?? null;
 }
 
 // ─── Submission History ─────────────────────────────────────────────
@@ -347,16 +347,16 @@ export async function castVote(data: { eventId: number; bracketId?: number; user
 
 export async function getUserVoteForBracket(bracketId: number, userId: number) {
   const db = await getDb();
-  if (!db) return undefined;
+  if (!db) return null;
   const result = await db.select().from(votes).where(and(eq(votes.bracketId, bracketId), eq(votes.userId, userId))).limit(1);
-  return result[0];
+  return result[0] ?? null;
 }
 
 export async function getUserVoteForEvent(eventId: number, userId: number) {
   const db = await getDb();
-  if (!db) return undefined;
+  if (!db) return null;
   const result = await db.select().from(votes).where(and(eq(votes.eventId, eventId), eq(votes.userId, userId), isNull(votes.bracketId))).limit(1);
-  return result[0];
+  return result[0] ?? null;
 }
 
 export async function getBracketVotes(bracketId: number) {
