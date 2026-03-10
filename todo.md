@@ -77,8 +77,19 @@
 - [x] Group settings page (name, description, admin management)
 - [x] Landing page showing user's groups
 - [x] All existing pages scoped to selected group
-- [x] Tests for group-scoped operations (38 passing)
+- [x] Tests for group-scoped operations (51 passing)
 - [x] Fix: `<p>` cannot contain nested `<div>` error on Home page (/)
 - [x] Fix: voting.myVote query returns undefined instead of null
 - [x] Fix: submissions.mySubmission query returns undefined instead of null
 - [x] Fix: "Need at least 2 submissions" error - improved message clarity
+
+## Features v3.0
+- [x] Reading progress tracker (log current page, group-wide progress bar)
+- [x] Book ratings and reviews from group members (1-5 stars, text reviews, average rating)
+- [x] Group settings page (edit name/description, transfer ownership, delete group, leave group, remove members)
+- [x] Toast notifications for start-voting errors
+- [x] Submission count tracker on event detail page (X / Y submitted)
+- [x] Auto-disable Start Voting button when fewer than 2 submissions
+- [x] Book detail page with reviews and ratings
+- [x] Clickable book cards linking to detail page
+- [x] Tests for reading progress, reviews, and group settings (51 total passing)

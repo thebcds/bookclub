@@ -11,6 +11,8 @@ import {
   groups,
   invitations,
   readingMilestones,
+  readingProgress,
+  bookReviews,
   submissionHistory,
   submissions,
   users,
@@ -432,6 +434,110 @@ export async function getEventMilestones(eventId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(readingMilestones).where(eq(readingMilestones.eventId, eventId)).orderBy(readingMilestones.targetDate);
+}
+
+// ─── Reading Progress ──────────────────────────────────────────────
+export async function upsertReadingProgress(data: { groupId: number; eventId: number; userId: number; currentPage: number; totalPages?: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const percentComplete = data.totalPages && data.totalPages > 0 ? Math.min(100, Math.round((data.currentPage / data.totalPages) * 100)) : 0;
+  const existing = await db.select().from(readingProgress).where(and(eq(readingProgress.eventId, data.eventId), eq(readingProgress.userId, data.userId))).limit(1);
+  if (existing.length > 0) {
+    await db.update(readingProgress).set({ currentPage: data.currentPage, totalPages: data.totalPages ?? null, percentComplete }).where(eq(readingProgress.id, existing[0].id));
+    return existing[0].id;
+  }
+  const result = await db.insert(readingProgress).values({ ...data, percentComplete, totalPages: data.totalPages ?? null });
+  return result[0].insertId;
+}
+
+export async function getEventReadingProgress(eventId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({ id: readingProgress.id, userId: readingProgress.userId, currentPage: readingProgress.currentPage, totalPages: readingProgress.totalPages, percentComplete: readingProgress.percentComplete, updatedAt: readingProgress.updatedAt, userName: users.name })
+    .from(readingProgress)
+    .leftJoin(users, eq(readingProgress.userId, users.id))
+    .where(eq(readingProgress.eventId, eventId));
+}
+
+export async function getMyReadingProgress(eventId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(readingProgress).where(and(eq(readingProgress.eventId, eventId), eq(readingProgress.userId, userId))).limit(1);
+  return result[0] ?? null;
+}
+
+// ─── Book Reviews ──────────────────────────────────────────────────
+export async function createBookReview(data: { groupId: number; bookId: number; userId: number; rating: number; reviewText?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const existing = await db.select().from(bookReviews).where(and(eq(bookReviews.bookId, data.bookId), eq(bookReviews.userId, data.userId), eq(bookReviews.groupId, data.groupId))).limit(1);
+  if (existing.length > 0) {
+    await db.update(bookReviews).set({ rating: data.rating, reviewText: data.reviewText ?? null }).where(eq(bookReviews.id, existing[0].id));
+    return existing[0].id;
+  }
+  const result = await db.insert(bookReviews).values({ ...data, reviewText: data.reviewText ?? null });
+  return result[0].insertId;
+}
+
+export async function getBookReviews(bookId: number, groupId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({ id: bookReviews.id, userId: bookReviews.userId, rating: bookReviews.rating, reviewText: bookReviews.reviewText, createdAt: bookReviews.createdAt, updatedAt: bookReviews.updatedAt, userName: users.name })
+    .from(bookReviews)
+    .leftJoin(users, eq(bookReviews.userId, users.id))
+    .where(and(eq(bookReviews.bookId, bookId), eq(bookReviews.groupId, groupId)))
+    .orderBy(desc(bookReviews.createdAt));
+}
+
+export async function getBookAverageRating(bookId: number, groupId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select({ avg: sql<number>`AVG(${bookReviews.rating})`, count: sql<number>`COUNT(*)` }).from(bookReviews).where(and(eq(bookReviews.bookId, bookId), eq(bookReviews.groupId, groupId)));
+  if (!result[0] || Number(result[0].count) === 0) return null;
+  return { average: Math.round(Number(result[0].avg) * 10) / 10, count: Number(result[0].count) };
+}
+
+// ─── Group Management ──────────────────────────────────────────────
+export async function deleteGroup(groupId: number) {
+  const db = await getDb();
+  if (!db) return;
+  // Delete all group data in order
+  await db.delete(chatMessages).where(eq(chatMessages.groupId, groupId));
+  await db.delete(readingProgress).where(eq(readingProgress.groupId, groupId));
+  await db.delete(bookReviews).where(eq(bookReviews.groupId, groupId));
+  await db.delete(invitations).where(eq(invitations.groupId, groupId));
+  // Delete event-related data
+  const groupEvents = await db.select({ id: events.id }).from(events).where(eq(events.groupId, groupId));
+  for (const evt of groupEvents) {
+    await db.delete(votes).where(eq(votes.eventId, evt.id));
+    await db.delete(brackets).where(eq(brackets.eventId, evt.id));
+    await db.delete(submissions).where(eq(submissions.eventId, evt.id));
+    await db.delete(readingMilestones).where(eq(readingMilestones.eventId, evt.id));
+  }
+  await db.delete(events).where(eq(events.groupId, groupId));
+  const groupBooks = await db.select({ id: books.id }).from(books).where(eq(books.groupId, groupId));
+  for (const bk of groupBooks) {
+    await db.delete(submissionHistory).where(eq(submissionHistory.bookId, bk.id));
+  }
+  await db.delete(books).where(eq(books.groupId, groupId));
+  await db.delete(calendarEvents).where(eq(calendarEvents.groupId, groupId));
+  await db.delete(groupMembers).where(eq(groupMembers.groupId, groupId));
+  await db.delete(groups).where(eq(groups.id, groupId));
+}
+
+export async function removeGroupMember(groupId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(groupMembers).where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, userId)));
+}
+
+export async function transferGroupOwnership(groupId: number, newOwnerId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(groups).set({ createdBy: newOwnerId }).where(eq(groups.id, groupId));
+  await db.update(groupMembers).set({ role: "admin" }).where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, newOwnerId)));
 }
 
 // ─── Dashboard Queries (group-scoped) ──────────────────────────────

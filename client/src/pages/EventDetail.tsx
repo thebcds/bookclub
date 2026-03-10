@@ -20,6 +20,7 @@ import { useGroup } from "@/contexts/GroupContext";
 import { trpc } from "@/lib/trpc";
 import {
   ArrowLeft,
+  BookMarked,
   BookOpen,
   Check,
   Crown,
@@ -28,7 +29,7 @@ import {
   Trophy,
   Vote,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import { useLocation, useParams } from "wouter";
 
@@ -128,17 +129,23 @@ export default function EventDetailPage() {
           </div>
         </div>
         {isGroupAdmin && event.status === "submissions_open" && (
-          <Button
-            onClick={() => startVoting.mutate({ groupId: gid!, eventId })}
-            disabled={startVoting.isPending}
-          >
-            {startVoting.isPending ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Vote className="h-4 w-4 mr-2" />
-            )}
-            Start Voting
-          </Button>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">
+              {(subs?.length ?? 0)} / {event.maxSubmissions} submitted
+            </span>
+            <Button
+              onClick={() => startVoting.mutate({ groupId: gid!, eventId })}
+              disabled={startVoting.isPending || (subs?.length ?? 0) < 2}
+              title={(subs?.length ?? 0) < 2 ? "Need at least 2 submissions to start voting" : "Start the voting round"}
+            >
+              {startVoting.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Vote className="h-4 w-4 mr-2" />
+              )}
+              Start Voting
+            </Button>
+          </div>
         )}
         {isGroupAdmin &&
           event.status === "voting" &&
@@ -247,6 +254,12 @@ export default function EventDetailPage() {
               {event.votingScheme === "tournament" ? "Bracket" : "Voting"}
             </TabsTrigger>
           )}
+          {event.status === "completed" && event.winningBookId && (
+            <TabsTrigger value="progress">
+              <BookMarked className="h-3.5 w-3.5 mr-1.5" />
+              Reading Progress
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="submissions" className="mt-4">
@@ -278,7 +291,116 @@ export default function EventDetailPage() {
             />
           )}
         </TabsContent>
+
+        {event.status === "completed" && event.winningBookId && (
+          <TabsContent value="progress" className="mt-4">
+            <ReadingProgressTab eventId={eventId} groupId={gid!} winningBookId={event.winningBookId} />
+          </TabsContent>
+        )}
       </Tabs>
+    </div>
+  );
+}
+
+function ReadingProgressTab({ eventId, groupId, winningBookId }: { eventId: number; groupId: number; winningBookId: number }) {
+  const { data: book } = trpc.books.getById.useQuery({ id: winningBookId });
+  const { data: allProgress } = trpc.readingProgress.getForEvent.useQuery({ eventId });
+  const { data: myProgress } = trpc.readingProgress.mine.useQuery({ eventId });
+  const utils = trpc.useUtils();
+  const [currentPage, setCurrentPage] = useState("");
+
+  const updateProgress = trpc.readingProgress.update.useMutation({
+    onSuccess: () => {
+      toast.success("Progress updated!");
+      utils.readingProgress.getForEvent.invalidate({ eventId });
+      utils.readingProgress.mine.invalidate({ eventId });
+      setCurrentPage("");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const totalPages = book?.pageCount ?? 0;
+
+  return (
+    <div className="space-y-6">
+      {/* Update my progress */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Update Your Progress</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <Label htmlFor="currentPage" className="text-sm">Current Page</Label>
+              <Input
+                id="currentPage"
+                type="number"
+                min={0}
+                max={totalPages || undefined}
+                value={currentPage}
+                onChange={(e) => setCurrentPage(e.target.value)}
+                placeholder={myProgress ? `Currently on page ${myProgress.currentPage}` : "Enter page number"}
+              />
+            </div>
+            {totalPages > 0 && (
+              <div className="text-sm text-muted-foreground pt-5">/ {totalPages} pages</div>
+            )}
+            <Button
+              className="mt-5"
+              onClick={() => updateProgress.mutate({ groupId, eventId, currentPage: Number(currentPage), totalPages: totalPages || undefined })}
+              disabled={!currentPage || updateProgress.isPending}
+            >
+              {updateProgress.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update"}
+            </Button>
+          </div>
+          {myProgress && totalPages > 0 && (
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Your progress</span>
+                <span>{Math.round((myProgress.currentPage / totalPages) * 100)}%</span>
+              </div>
+              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all"
+                  style={{ width: `${Math.min(100, (myProgress.currentPage / totalPages) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Group progress */}
+      {allProgress && allProgress.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Group Progress</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {allProgress.map((p) => {
+                const pct = totalPages > 0 ? Math.round((p.currentPage / totalPages) * 100) : 0;
+                return (
+                  <div key={p.userId} className="space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-medium">{p.userName ?? "Member"}</span>
+                      <span className="text-muted-foreground">
+                        {p.currentPage}{totalPages > 0 ? ` / ${totalPages}` : ""} pages ({pct}%)
+                      </span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary/70 rounded-full transition-all"
+                        style={{ width: `${Math.min(100, pct)}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

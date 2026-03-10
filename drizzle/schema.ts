@@ -202,6 +202,31 @@ export const readingMilestones = mysqlTable("readingMilestones", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+// ─── Reading Progress (per user per event) ─────────────────────────
+export const readingProgress = mysqlTable("readingProgress", {
+  id: int("id").autoincrement().primaryKey(),
+  groupId: int("groupId").notNull(),
+  eventId: int("eventId").notNull(),
+  userId: int("userId").notNull(),
+  currentPage: int("currentPage").default(0).notNull(),
+  totalPages: int("totalPages"),
+  percentComplete: int("percentComplete").default(0).notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+// ─── Book Reviews (per user per book per group) ────────────────────
+export const bookReviews = mysqlTable("bookReviews", {
+  id: int("id").autoincrement().primaryKey(),
+  groupId: int("groupId").notNull(),
+  bookId: int("bookId").notNull(),
+  userId: int("userId").notNull(),
+  rating: int("rating").notNull(), // 1-5 stars
+  reviewText: text("reviewText"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 // ─── Relations ──────────────────────────────────────────────────────
 export const groupsRelations = relations(groups, ({ many, one }) => ({
   members: many(groupMembers),
@@ -265,8 +290,21 @@ export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
   user: one(users, { fields: [chatMessages.userId], references: [users.id] }),
 }));
 
-export const booksRelations = relations(books, ({ one }) => ({
+export const booksRelations = relations(books, ({ one, many }) => ({
   group: one(groups, { fields: [books.groupId], references: [groups.id] }),
+  reviews: many(bookReviews),
+}));
+
+export const readingProgressRelations = relations(readingProgress, ({ one }) => ({
+  group: one(groups, { fields: [readingProgress.groupId], references: [groups.id] }),
+  event: one(events, { fields: [readingProgress.eventId], references: [events.id] }),
+  user: one(users, { fields: [readingProgress.userId], references: [users.id] }),
+}));
+
+export const bookReviewsRelations = relations(bookReviews, ({ one }) => ({
+  group: one(groups, { fields: [bookReviews.groupId], references: [groups.id] }),
+  book: one(books, { fields: [bookReviews.bookId], references: [books.id] }),
+  user: one(users, { fields: [bookReviews.userId], references: [users.id] }),
 }));
 
 export const invitationsRelations = relations(invitations, ({ one }) => ({

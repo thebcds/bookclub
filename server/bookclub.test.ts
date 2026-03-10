@@ -176,6 +176,18 @@ vi.mock("./db", () => {
     // Milestone functions
     createMilestone: vi.fn().mockImplementation(async () => nextId++),
     getEventMilestones: vi.fn().mockResolvedValue([]),
+    // Reading progress functions
+    upsertReadingProgress: vi.fn().mockImplementation(async () => nextId++),
+    getEventReadingProgress: vi.fn().mockResolvedValue([]),
+    getMyReadingProgress: vi.fn().mockResolvedValue(null),
+    // Book review functions
+    createBookReview: vi.fn().mockImplementation(async () => nextId++),
+    getBookReviews: vi.fn().mockResolvedValue([]),
+    getBookAverageRating: vi.fn().mockResolvedValue(null),
+    // Group settings functions
+    deleteGroup: vi.fn().mockResolvedValue(undefined),
+    removeGroupMember: vi.fn().mockResolvedValue(undefined),
+    transferGroupOwnership: vi.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -518,7 +530,7 @@ describe("openLibrary", () => {
       expect(results[0]).toHaveProperty("author");
       expect(results[0]).toHaveProperty("coverUrl");
     }
-  });
+  }, 15000);
 
   it("rejects empty search query", async () => {
     const caller = appRouter.createCaller(createCtx(createMockUser()));
@@ -532,6 +544,114 @@ describe("openLibrary", () => {
     await expect(
       caller.openLibrary.search({ query: "test" })
     ).rejects.toThrow();
+  });
+});
+
+// ─── Reading Progress Tests ────────────────────────────────────────
+describe("readingProgress", () => {
+  it("updates reading progress for a member", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.readingProgress.update({
+      groupId: 1,
+      eventId: 1,
+      currentPage: 150,
+      totalPages: 400,
+    });
+    expect(result.id).toBeDefined();
+  });
+
+  it("gets reading progress for an event", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.readingProgress.getForEvent({ eventId: 1 });
+    expect(Array.isArray(result)).toBe(true);
+  });
+
+  it("gets my reading progress", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.readingProgress.mine({ eventId: 1 });
+    expect(result).toBeNull();
+  });
+
+  it("requires authentication", async () => {
+    const caller = appRouter.createCaller(createCtx(null));
+    await expect(
+      caller.readingProgress.update({ groupId: 1, eventId: 1, currentPage: 50 })
+    ).rejects.toThrow();
+  });
+});
+
+// ─── Book Reviews Tests ────────────────────────────────────────────
+describe("reviews", () => {
+  it("creates a book review", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.reviews.create({
+      groupId: 1,
+      bookId: 100,
+      rating: 4,
+      reviewText: "Excellent book, highly recommend!",
+    });
+    expect(result.id).toBeDefined();
+  });
+
+  it("validates rating range (1-5)", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    await expect(
+      caller.reviews.create({ groupId: 1, bookId: 100, rating: 0 })
+    ).rejects.toThrow();
+    await expect(
+      caller.reviews.create({ groupId: 1, bookId: 100, rating: 6 })
+    ).rejects.toThrow();
+  });
+
+  it("lists reviews for a book", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.reviews.listForBook({ groupId: 1, bookId: 100 });
+    expect(Array.isArray(result)).toBe(true);
+  });
+
+  it("gets average rating for a book", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.reviews.averageRating({ groupId: 1, bookId: 100 });
+    // null when no reviews
+    expect(result).toBeNull();
+  });
+
+  it("requires authentication", async () => {
+    const caller = appRouter.createCaller(createCtx(null));
+    await expect(
+      caller.reviews.create({ groupId: 1, bookId: 100, rating: 3 })
+    ).rejects.toThrow();
+  });
+});
+
+// ─── Group Settings Tests ──────────────────────────────────────────
+describe("groupSettings", () => {
+  it("admin can update group via groups.update", async () => {
+    const caller = appRouter.createCaller(createCtx(createAdminUser()));
+    const result = await caller.groups.update({
+      groupId: 1,
+      name: "Updated Book Club Name",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("non-admin cannot update group", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    await expect(
+      caller.groups.update({ groupId: 1, name: "Hacked" })
+    ).rejects.toThrow();
+  });
+
+  it("creator can delete group", async () => {
+    const caller = appRouter.createCaller(createCtx(createAdminUser()));
+    const result = await caller.groupSettings.delete({ groupId: 1 });
+    expect(result.success).toBe(true);
+  });
+
+  it("member can leave group", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.groupSettings.leave({ groupId: 1 });
+    expect(result.success).toBe(true);
   });
 });
 

@@ -15,6 +15,8 @@ import MembersPage from "./pages/Members";
 import EventDetailPage from "./pages/EventDetail";
 import EventsPage from "./pages/Events";
 import NewEventPage from "./pages/NewEvent";
+import GroupSettingsPage from "./pages/GroupSettings";
+import BookDetailPage from "./pages/BookDetail";
 
 function DashboardRouter() {
   return (
@@ -29,6 +31,8 @@ function DashboardRouter() {
           <Route path="/calendar" component={CalendarPage} />
           <Route path="/chat" component={ChatPage} />
           <Route path="/members" component={MembersPage} />
+          <Route path="/books/:id" component={BookDetailPage} />
+          <Route path="/settings" component={GroupSettingsPage} />
           <Route component={NotFound} />
         </Switch>
       </DashboardLayout>

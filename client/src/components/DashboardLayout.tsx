@@ -29,6 +29,7 @@ import {
   LogOut,
   MessageCircle,
   PanelLeft,
+  Settings,
   Trophy,
   Users,
 } from "lucide-react";
@@ -47,6 +48,7 @@ const menuItems = [
   { icon: Calendar, label: "Calendar", path: "/calendar" },
   { icon: MessageCircle, label: "Chat", path: "/chat" },
   { icon: Users, label: "Members", path: "/members" },
+  { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";

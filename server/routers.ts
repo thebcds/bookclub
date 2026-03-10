@@ -553,6 +553,89 @@ export const appRouter = router({
         return db.getEventMilestones(input.eventId);
       }),
   }),
+
+  // ─── Reading Progress ─────────────────────────────────────────
+  readingProgress: router({
+    update: protectedProcedure
+      .input(z.object({ groupId: z.number(), eventId: z.number(), currentPage: z.number().min(0), totalPages: z.number().positive().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        await requireGroupMember(ctx.user.id, input.groupId);
+        const id = await db.upsertReadingProgress({ groupId: input.groupId, eventId: input.eventId, userId: ctx.user.id, currentPage: input.currentPage, totalPages: input.totalPages });
+        return { id };
+      }),
+    getForEvent: protectedProcedure
+      .input(z.object({ eventId: z.number() }))
+      .query(async ({ input }) => {
+        return db.getEventReadingProgress(input.eventId);
+      }),
+    mine: protectedProcedure
+      .input(z.object({ eventId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return db.getMyReadingProgress(input.eventId, ctx.user.id);
+      }),
+  }),
+
+  // ─── Book Reviews ─────────────────────────────────────────────
+  reviews: router({
+    create: protectedProcedure
+      .input(z.object({ groupId: z.number(), bookId: z.number(), rating: z.number().min(1).max(5), reviewText: z.string().max(2000).optional() }))
+      .mutation(async ({ ctx, input }) => {
+        await requireGroupMember(ctx.user.id, input.groupId);
+        const id = await db.createBookReview({ groupId: input.groupId, bookId: input.bookId, userId: ctx.user.id, rating: input.rating, reviewText: input.reviewText });
+        return { id };
+      }),
+    listForBook: protectedProcedure
+      .input(z.object({ groupId: z.number(), bookId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        await requireGroupMember(ctx.user.id, input.groupId);
+        return db.getBookReviews(input.bookId, input.groupId);
+      }),
+    averageRating: protectedProcedure
+      .input(z.object({ groupId: z.number(), bookId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        await requireGroupMember(ctx.user.id, input.groupId);
+        return db.getBookAverageRating(input.bookId, input.groupId);
+      }),
+  }),
+
+  // ─── Group Settings (admin) ───────────────────────────────────
+  groupSettings: router({
+    delete: protectedProcedure
+      .input(z.object({ groupId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const group = await db.getGroupById(input.groupId);
+        if (!group) throw new TRPCError({ code: "NOT_FOUND" });
+        if (group.createdBy !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Only the group creator can delete the group" });
+        await db.deleteGroup(input.groupId);
+        return { success: true };
+      }),
+    removeMember: protectedProcedure
+      .input(z.object({ groupId: z.number(), userId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await requireGroupAdmin(ctx.user.id, input.groupId);
+        if (input.userId === ctx.user.id) throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot remove yourself" });
+        await db.removeGroupMember(input.groupId, input.userId);
+        return { success: true };
+      }),
+    transferOwnership: protectedProcedure
+      .input(z.object({ groupId: z.number(), newOwnerId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const group = await db.getGroupById(input.groupId);
+        if (!group) throw new TRPCError({ code: "NOT_FOUND" });
+        if (group.createdBy !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Only the group creator can transfer ownership" });
+        await db.transferGroupOwnership(input.groupId, input.newOwnerId);
+        return { success: true };
+      }),
+    leave: protectedProcedure
+      .input(z.object({ groupId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const group = await db.getGroupById(input.groupId);
+        if (!group) throw new TRPCError({ code: "NOT_FOUND" });
+        if (group.createdBy === ctx.user.id) throw new TRPCError({ code: "BAD_REQUEST", message: "The group creator cannot leave. Transfer ownership first or delete the group." });
+        await db.removeGroupMember(input.groupId, ctx.user.id);
+        return { success: true };
+      }),
+  }),
 });
 
 // ─── Tournament Bracket Generation ──────────────────────────────────

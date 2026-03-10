@@ -7,6 +7,7 @@ import { useGroup } from "@/contexts/GroupContext";
 import { trpc } from "@/lib/trpc";
 import { BookOpen, Search } from "lucide-react";
 import { useState } from "react";
+import { useLocation } from "wouter";
 
 function BookCover({ coverUrl, title }: { coverUrl?: string | null; title: string }) {
   const [imgError, setImgError] = useState(false);
@@ -30,6 +31,7 @@ function BookCover({ coverUrl, title }: { coverUrl?: string | null; title: strin
 export default function BooksPage() {
   const { activeGroup } = useGroup();
   const [searchQuery, setSearchQuery] = useState("");
+  const [, navigate] = useLocation();
   const { data: allBooks, isLoading } = trpc.books.list.useQuery(
     { groupId: activeGroup?.id ?? 0 },
     { enabled: !!activeGroup }
@@ -55,7 +57,7 @@ export default function BooksPage() {
   );
 
   const BookCard = ({ book }: { book: NonNullable<typeof allBooks>[0] }) => (
-    <Card className="hover:shadow-sm transition-shadow">
+    <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/books/${book.id}`)}>
       <CardContent className="p-4 flex items-center gap-4">
         <BookCover coverUrl={book.coverUrl} title={book.title} />
         <div className="min-w-0 flex-1">
@@ -148,7 +150,7 @@ export default function BooksPage() {
           ) : readBooks && readBooks.length > 0 ? (
             <div className="grid gap-3">
               {readBooks.map((book) => (
-                <Card key={book.id} className="hover:shadow-sm transition-shadow">
+                <Card key={book.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/books/${book.id}`)}>
                   <CardContent className="p-4 flex items-center gap-4">
                     <BookCover coverUrl={book.coverUrl} title={book.title} />
                     <div className="min-w-0 flex-1">
