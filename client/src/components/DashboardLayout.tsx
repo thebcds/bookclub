@@ -28,18 +28,22 @@ import {
   LayoutDashboard,
   LogOut,
   MessageCircle,
+  Moon,
   PanelLeft,
   Settings,
+  Sun,
   Trophy,
   Users,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { useTheme } from "@/contexts/ThemeContext";
 import CreateGroupDialog from "./CreateGroupDialog";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import GroupSelector from "./GroupSelector";
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
@@ -185,6 +189,8 @@ function DashboardLayoutContent({ children, setSidebarWidth }: { children: React
           </SidebarContent>
 
           <SidebarFooter className="p-3">
+            <ThemeToggle isCollapsed={isCollapsed} />
+            <Separator className="my-1" />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none">
@@ -227,5 +233,46 @@ function DashboardLayoutContent({ children, setSidebarWidth }: { children: React
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </SidebarInset>
     </>
+  );
+}
+
+function ThemeToggle({ isCollapsed }: { isCollapsed: boolean }) {
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme === "dark";
+
+  if (isCollapsed) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={toggleTheme}
+            className="flex items-center justify-center h-9 w-9 mx-auto rounded-lg hover:bg-accent transition-colors focus:outline-none"
+            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {isDark ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-muted-foreground" />}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right">{isDark ? "Light mode" : "Dark mode"}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <button
+      onClick={toggleTheme}
+      className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-accent/50 transition-colors w-full text-left focus:outline-none"
+      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+    >
+      <div className="relative h-5 w-10 rounded-full bg-muted border border-border transition-colors">
+        <div
+          className={`absolute top-0.5 h-4 w-4 rounded-full transition-all duration-200 flex items-center justify-center ${
+            isDark ? "left-5 bg-primary" : "left-0.5 bg-white shadow-sm border border-border"
+          }`}
+        >
+          {isDark ? <Moon className="h-2.5 w-2.5 text-primary-foreground" /> : <Sun className="h-2.5 w-2.5 text-amber-500" />}
+        </div>
+      </div>
+      <span className="text-sm text-muted-foreground">{isDark ? "Dark" : "Light"}</span>
+    </button>
   );
 }

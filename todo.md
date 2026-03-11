@@ -93,3 +93,9 @@
 - [x] Book detail page with reviews and ratings
 - [x] Clickable book cards linking to detail page
 - [x] Tests for reading progress, reviews, and group settings (51 total passing)
+
+## Theme Switching (v3.1)
+- [x] Dark mode CSS variables in index.css (already existed)
+- [x] Enable switchable theme in ThemeProvider
+- [x] Theme toggle button in sidebar footer with animated switch
+- [x] Persist theme preference across sessions via localStorage
