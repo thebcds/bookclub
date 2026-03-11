@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 
-type Theme = "light" | "dark";
+export type Theme = "light" | "dark" | "retro";
 
 interface ThemeContextType {
   theme: Theme;
-  toggleTheme?: () => void;
+  setTheme: (theme: Theme) => void;
+  cycleTheme: () => void;
   switchable: boolean;
 }
 
@@ -16,25 +17,32 @@ interface ThemeProviderProps {
   switchable?: boolean;
 }
 
+const THEME_ORDER: Theme[] = ["light", "dark", "retro"];
+
 export function ThemeProvider({
   children,
   defaultTheme = "light",
   switchable = false,
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(() => {
+  const [theme, setThemeState] = useState<Theme>(() => {
     if (switchable) {
       const stored = localStorage.getItem("theme");
-      return (stored as Theme) || defaultTheme;
+      if (stored && THEME_ORDER.includes(stored as Theme)) {
+        return stored as Theme;
+      }
     }
     return defaultTheme;
   });
 
   useEffect(() => {
     const root = document.documentElement;
+    // Remove all theme classes
+    root.classList.remove("dark", "retro");
+    // Add the active theme class
     if (theme === "dark") {
       root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
+    } else if (theme === "retro") {
+      root.classList.add("retro");
     }
 
     if (switchable) {
@@ -42,14 +50,20 @@ export function ThemeProvider({
     }
   }, [theme, switchable]);
 
-  const toggleTheme = switchable
-    ? () => {
-        setTheme(prev => (prev === "light" ? "dark" : "light"));
-      }
-    : undefined;
+  const setTheme = (newTheme: Theme) => {
+    if (switchable) setThemeState(newTheme);
+  };
+
+  const cycleTheme = () => {
+    if (!switchable) return;
+    setThemeState((prev) => {
+      const idx = THEME_ORDER.indexOf(prev);
+      return THEME_ORDER[(idx + 1) % THEME_ORDER.length];
+    });
+  };
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, switchable }}>
+    <ThemeContext.Provider value={{ theme, setTheme, cycleTheme, switchable }}>
       {children}
     </ThemeContext.Provider>
   );

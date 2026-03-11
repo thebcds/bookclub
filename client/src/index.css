@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant retro (&:is(.retro *));
 
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
@@ -114,6 +115,81 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.65 0.15 55);
+}
+
+/* Retro theme - warm CRT/terminal aesthetic with amber phosphor glow */
+.retro {
+  --primary: oklch(0.72 0.18 85);
+  --primary-foreground: oklch(0.12 0.02 85);
+  --sidebar-primary: oklch(0.72 0.18 85);
+  --sidebar-primary-foreground: oklch(0.12 0.02 85);
+  --background: oklch(0.13 0.02 85);
+  --foreground: oklch(0.78 0.14 85);
+  --card: oklch(0.16 0.025 85);
+  --card-foreground: oklch(0.78 0.14 85);
+  --popover: oklch(0.16 0.025 85);
+  --popover-foreground: oklch(0.78 0.14 85);
+  --secondary: oklch(0.20 0.03 85);
+  --secondary-foreground: oklch(0.72 0.12 85);
+  --muted: oklch(0.22 0.025 85);
+  --muted-foreground: oklch(0.55 0.08 85);
+  --accent: oklch(0.22 0.035 85);
+  --accent-foreground: oklch(0.80 0.15 85);
+  --destructive: oklch(0.60 0.20 30);
+  --destructive-foreground: oklch(0.95 0 0);
+  --border: oklch(0.30 0.04 85);
+  --input: oklch(0.25 0.035 85);
+  --ring: oklch(0.72 0.18 85);
+  --chart-1: oklch(0.72 0.18 85);
+  --chart-2: oklch(0.60 0.14 85);
+  --chart-3: oklch(0.50 0.10 85);
+  --chart-4: oklch(0.65 0.12 60);
+  --chart-5: oklch(0.55 0.16 40);
+  --sidebar: oklch(0.11 0.018 85);
+  --sidebar-foreground: oklch(0.78 0.14 85);
+  --sidebar-accent: oklch(0.20 0.03 85);
+  --sidebar-accent-foreground: oklch(0.80 0.15 85);
+  --sidebar-border: oklch(0.30 0.04 85);
+  --sidebar-ring: oklch(0.72 0.18 85);
+  --radius: 0.25rem;
+}
+
+/* Retro-specific styles */
+.retro body {
+  font-family: "Courier New", "Lucida Console", Monaco, monospace;
+  text-shadow: 0 0 3px oklch(0.72 0.18 85 / 30%);
+}
+
+.retro * {
+  border-radius: 2px !important;
+}
+
+.retro input,
+.retro textarea,
+.retro select {
+  font-family: "Courier New", "Lucida Console", Monaco, monospace;
+}
+
+.retro button {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: "Courier New", "Lucida Console", Monaco, monospace;
+}
+
+/* Scanline overlay effect for retro mode */
+.retro::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    oklch(0 0 0 / 3%) 2px,
+    oklch(0 0 0 / 3%) 4px
+  );
 }
 
 @layer base {

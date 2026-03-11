@@ -28,6 +28,7 @@ import {
   LayoutDashboard,
   LogOut,
   MessageCircle,
+  Monitor,
   Moon,
   PanelLeft,
   Settings,
@@ -37,7 +38,7 @@ import {
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { useTheme } from "@/contexts/ThemeContext";
+import { useTheme, type Theme } from "@/contexts/ThemeContext";
 import CreateGroupDialog from "./CreateGroupDialog";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import GroupSelector from "./GroupSelector";
@@ -236,43 +237,55 @@ function DashboardLayoutContent({ children, setSidebarWidth }: { children: React
   );
 }
 
+const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "retro", label: "Retro", icon: Monitor },
+];
+
 function ThemeToggle({ isCollapsed }: { isCollapsed: boolean }) {
-  const { theme, toggleTheme } = useTheme();
-  const isDark = theme === "dark";
+  const { theme, cycleTheme, setTheme } = useTheme();
+  const currentOption = themeOptions.find((o) => o.value === theme) ?? themeOptions[0];
+  const CurrentIcon = currentOption.icon;
 
   if (isCollapsed) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
           <button
-            onClick={toggleTheme}
+            onClick={cycleTheme}
             className="flex items-center justify-center h-9 w-9 mx-auto rounded-lg hover:bg-accent transition-colors focus:outline-none"
-            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            aria-label={`Current theme: ${currentOption.label}. Click to cycle.`}
           >
-            {isDark ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-muted-foreground" />}
+            <CurrentIcon className="h-4 w-4 text-primary" />
           </button>
         </TooltipTrigger>
-        <TooltipContent side="right">{isDark ? "Light mode" : "Dark mode"}</TooltipContent>
+        <TooltipContent side="right">{currentOption.label} mode</TooltipContent>
       </Tooltip>
     );
   }
 
   return (
-    <button
-      onClick={toggleTheme}
-      className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-accent/50 transition-colors w-full text-left focus:outline-none"
-      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-    >
-      <div className="relative h-5 w-10 rounded-full bg-muted border border-border transition-colors">
-        <div
-          className={`absolute top-0.5 h-4 w-4 rounded-full transition-all duration-200 flex items-center justify-center ${
-            isDark ? "left-5 bg-primary" : "left-0.5 bg-white shadow-sm border border-border"
-          }`}
-        >
-          {isDark ? <Moon className="h-2.5 w-2.5 text-primary-foreground" /> : <Sun className="h-2.5 w-2.5 text-amber-500" />}
-        </div>
-      </div>
-      <span className="text-sm text-muted-foreground">{isDark ? "Dark" : "Light"}</span>
-    </button>
+    <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-1">
+      {themeOptions.map((opt) => {
+        const Icon = opt.icon;
+        const isActive = theme === opt.value;
+        return (
+          <button
+            key={opt.value}
+            onClick={() => setTheme(opt.value)}
+            className={`flex items-center gap-1.5 flex-1 justify-center rounded-md px-2 py-1.5 text-xs font-medium transition-all focus:outline-none ${
+              isActive
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+            }`}
+            aria-label={`${opt.label} mode`}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            <span>{opt.label}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }

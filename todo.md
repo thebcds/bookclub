@@ -121,3 +121,9 @@
 - [x] Frontend: Admin dropdown menu with gear icon (edit, reopen, cancel, reactivate, override winner)
 - [x] Frontend: Override winner UI (select from submitted books or clear)
 - [x] All 51 tests passing
+
+## Retro Theme & Bug Fixes (v3.4)
+- [x] Fix: Open Library search dropdown overlaps form fields in submission dialog (absolute positioning with z-50)
+- [x] Add retro display theme mode (amber CRT aesthetic with scanlines, monospace font, phosphor glow)
+- [x] Update theme toggle to 3-mode segmented control (Light, Dark, Retro) in sidebar footer
+- [x] All 51 tests passing
