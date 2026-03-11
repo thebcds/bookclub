@@ -25,10 +25,29 @@ import {
   Check,
   Crown,
   Loader2,
+  MoreHorizontal,
+  Pencil,
   Plus,
+  RotateCcw,
+  Settings2,
   Trophy,
   Vote,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import { useLocation, useParams } from "wouter";
@@ -75,6 +94,40 @@ export default function EventDetailPage() {
   });
 
   const gid = activeGroup?.id;
+  const [showEditDialog, setShowEditDialog] = useState(false);
+
+  const updateEvent = trpc.events.update.useMutation({
+    onSuccess: () => {
+      toast.success("Event updated!");
+      utils.events.getById.invalidate({ id: eventId });
+      setShowEditDialog(false);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const overrideWinner = trpc.events.overrideWinner.useMutation({
+    onSuccess: () => {
+      toast.success("Winner updated!");
+      utils.events.getById.invalidate({ id: eventId });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const reopenSubmissions = trpc.events.reopenSubmissions.useMutation({
+    onSuccess: () => {
+      toast.success("Submissions reopened!");
+      utils.events.getById.invalidate({ id: eventId });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const updateStatus = trpc.events.updateStatus.useMutation({
+    onSuccess: () => {
+      toast.success("Status updated!");
+      utils.events.getById.invalidate({ id: eventId });
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   if (isLoading) {
     return (
@@ -130,6 +183,54 @@ export default function EventDetailPage() {
             </Badge>
           </div>
         </div>
+        {isGroupAdmin && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon">
+                <Settings2 className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
+                <Pencil className="h-4 w-4 mr-2" />
+                Edit Event
+              </DropdownMenuItem>
+              {event.status !== "submissions_open" && (
+                <DropdownMenuItem onClick={() => reopenSubmissions.mutate({ groupId: gid!, eventId })}>
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Reopen Submissions
+                </DropdownMenuItem>
+              )}
+              {event.status !== "cancelled" && (
+                <DropdownMenuItem onClick={() => updateStatus.mutate({ groupId: gid!, eventId, status: "cancelled" })}>
+                  Cancel Event
+                </DropdownMenuItem>
+              )}
+              {event.status === "cancelled" && (
+                <DropdownMenuItem onClick={() => updateStatus.mutate({ groupId: gid!, eventId, status: "submissions_open" })}>
+                  Reactivate Event
+                </DropdownMenuItem>
+              )}
+              {event.status === "completed" && subs && subs.length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  {subs.map((sub) => (
+                    <DropdownMenuItem
+                      key={sub.bookId}
+                      onClick={() => overrideWinner.mutate({ groupId: gid!, eventId, bookId: sub.bookId })}
+                    >
+                      <Crown className="h-4 w-4 mr-2" />
+                      Set Winner: {sub.bookTitle}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuItem onClick={() => overrideWinner.mutate({ groupId: gid!, eventId, bookId: null })}>
+                    Clear Winner
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         {isGroupAdmin && event.status === "submissions_open" && event.votingScheme !== "no_vote" && (
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">
@@ -252,6 +353,17 @@ export default function EventDetailPage() {
       {/* Winner display */}
       {event.status === "completed" && event.winningBookId && (
         <WinnerCard bookId={event.winningBookId} />
+      )}
+
+      {/* Edit Event Dialog */}
+      {isGroupAdmin && (
+        <EditEventDialog
+          event={event}
+          open={showEditDialog}
+          onOpenChange={setShowEditDialog}
+          onSave={(data) => updateEvent.mutate({ groupId: gid!, eventId, ...data })}
+          isPending={updateEvent.isPending}
+        />
       )}
 
       <Tabs defaultValue={event.status === "voting" ? "voting" : "submissions"}>
@@ -714,6 +826,147 @@ function SubmitBookForm({
         </form>
       )}
     </div>
+  );
+}
+
+function EditEventDialog({
+  event,
+  open,
+  onOpenChange,
+  onSave,
+  isPending,
+}: {
+  event: any;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSave: (data: any) => void;
+  isPending: boolean;
+}) {
+  const [title, setTitle] = useState(event.title);
+  const [description, setDescription] = useState(event.description ?? "");
+  const [votingScheme, setVotingScheme] = useState(event.votingScheme);
+  const [maxPageCount, setMaxPageCount] = useState(event.maxPageCount?.toString() ?? "");
+  const [minRating, setMinRating] = useState(event.minRating?.toString() ?? "");
+  const [maxTotalSubmissions, setMaxTotalSubmissions] = useState(event.maxTotalSubmissions?.toString() ?? "8");
+  const [maxSubmissionsPerMember, setMaxSubmissionsPerMember] = useState(event.maxSubmissionsPerMember?.toString() ?? "1");
+  const [allowPreviouslyRead, setAllowPreviouslyRead] = useState(event.allowPreviouslyRead ?? false);
+  const [anonymousSubmissions, setAnonymousSubmissions] = useState(event.anonymousSubmissions ?? false);
+  const [submissionDeadline, setSubmissionDeadline] = useState(
+    event.submissionDeadline ? new Date(event.submissionDeadline).toISOString().slice(0, 16) : ""
+  );
+  const [votingDeadline, setVotingDeadline] = useState(
+    event.votingDeadline ? new Date(event.votingDeadline).toISOString().slice(0, 16) : ""
+  );
+  const [readingDeadline, setReadingDeadline] = useState(
+    event.readingDeadline ? new Date(event.readingDeadline).toISOString().slice(0, 16) : ""
+  );
+
+  const handleSave = () => {
+    const data: any = {};
+    if (title !== event.title) data.title = title;
+    if (description !== (event.description ?? "")) data.description = description;
+    if (votingScheme !== event.votingScheme) data.votingScheme = votingScheme;
+    if (maxPageCount !== (event.maxPageCount?.toString() ?? "")) {
+      data.maxPageCount = maxPageCount ? parseInt(maxPageCount) : null;
+    }
+    if (minRating !== (event.minRating?.toString() ?? "")) {
+      data.minRating = minRating ? parseInt(minRating) : null;
+    }
+    if (parseInt(maxTotalSubmissions) !== event.maxTotalSubmissions) {
+      data.maxTotalSubmissions = parseInt(maxTotalSubmissions);
+    }
+    if (parseInt(maxSubmissionsPerMember) !== event.maxSubmissionsPerMember) {
+      data.maxSubmissionsPerMember = parseInt(maxSubmissionsPerMember);
+    }
+    if (allowPreviouslyRead !== event.allowPreviouslyRead) data.allowPreviouslyRead = allowPreviouslyRead;
+    if (anonymousSubmissions !== event.anonymousSubmissions) data.anonymousSubmissions = anonymousSubmissions;
+    const newSubDeadline = submissionDeadline ? new Date(submissionDeadline) : null;
+    const oldSubDeadline = event.submissionDeadline ? new Date(event.submissionDeadline).toISOString().slice(0, 16) : "";
+    if (submissionDeadline !== oldSubDeadline) data.submissionDeadline = newSubDeadline;
+    const newVoteDeadline = votingDeadline ? new Date(votingDeadline) : null;
+    const oldVoteDeadline = event.votingDeadline ? new Date(event.votingDeadline).toISOString().slice(0, 16) : "";
+    if (votingDeadline !== oldVoteDeadline) data.votingDeadline = newVoteDeadline;
+    const newReadDeadline = readingDeadline ? new Date(readingDeadline) : null;
+    const oldReadDeadline = event.readingDeadline ? new Date(event.readingDeadline).toISOString().slice(0, 16) : "";
+    if (readingDeadline !== oldReadDeadline) data.readingDeadline = newReadDeadline;
+    onSave(data);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Event</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Title</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Description</Label>
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
+          </div>
+          <div className="space-y-2">
+            <Label>Voting Scheme</Label>
+            <Select value={votingScheme} onValueChange={setVotingScheme}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="tournament">Tournament Bracket</SelectItem>
+                <SelectItem value="simple_majority">Simple Majority</SelectItem>
+                <SelectItem value="ranked_choice">Ranked Choice</SelectItem>
+                <SelectItem value="no_vote">No Vote</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Max Total Submissions</Label>
+              <Input type="number" min="1" max="64" value={maxTotalSubmissions} onChange={(e) => setMaxTotalSubmissions(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Per Member Limit</Label>
+              <Input type="number" min="1" max="64" value={maxSubmissionsPerMember} onChange={(e) => setMaxSubmissionsPerMember(e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Max Pages</Label>
+              <Input type="number" value={maxPageCount} onChange={(e) => setMaxPageCount(e.target.value)} placeholder="No limit" />
+            </div>
+            <div className="space-y-2">
+              <Label>Min Rating (0-100)</Label>
+              <Input type="number" min="0" max="100" value={minRating} onChange={(e) => setMinRating(e.target.value)} placeholder="No minimum" />
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <Label>Allow Previously Read</Label>
+            <Switch checked={allowPreviouslyRead} onCheckedChange={setAllowPreviouslyRead} />
+          </div>
+          <div className="flex items-center justify-between">
+            <Label>Anonymous Submissions</Label>
+            <Switch checked={anonymousSubmissions} onCheckedChange={setAnonymousSubmissions} />
+          </div>
+          <Separator />
+          <div className="space-y-2">
+            <Label>Submission Deadline</Label>
+            <Input type="datetime-local" value={submissionDeadline} onChange={(e) => setSubmissionDeadline(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Voting Deadline</Label>
+            <Input type="datetime-local" value={votingDeadline} onChange={(e) => setVotingDeadline(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Reading Deadline</Label>
+            <Input type="datetime-local" value={readingDeadline} onChange={(e) => setReadingDeadline(e.target.value)} />
+          </div>
+          <Button className="w-full" onClick={handleSave} disabled={isPending || !title.trim()}>
+            {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            Save Changes
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

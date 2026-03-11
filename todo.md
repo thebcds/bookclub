@@ -111,3 +111,13 @@
 - [x] Per-member multi-submission support with counter on Submit button
 - [x] Hide Start Voting button for no_vote events
 - [x] All 51 tests passing
+
+## Admin Event Editing (v3.3)
+- [x] Backend: events.update procedure (title, description, dates, criteria, voting scheme)
+- [x] Backend: events.updateStatus procedure (cancel, reactivate)
+- [x] Backend: events.overrideWinner procedure (admin can change or clear the winning book)
+- [x] Backend: events.reopenSubmissions procedure
+- [x] Frontend: Edit Event dialog on EventDetail page (admin only, full form)
+- [x] Frontend: Admin dropdown menu with gear icon (edit, reopen, cancel, reactivate, override winner)
+- [x] Frontend: Override winner UI (select from submitted books or clear)
+- [x] All 51 tests passing

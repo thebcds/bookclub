@@ -255,6 +255,35 @@ export async function updateEventStatus(eventId: number, status: "submissions_op
   await db.update(events).set({ status }).where(eq(events.id, eventId));
 }
 
+export async function updateEvent(eventId: number, data: {
+  title?: string; description?: string; votingScheme?: "tournament" | "simple_majority" | "ranked_choice" | "no_vote";
+  maxPageCount?: number | null; allowPreviouslyRead?: boolean; allowedGenres?: string[] | null; minRating?: number | null;
+  anonymousSubmissions?: boolean; maxTotalSubmissions?: number; maxSubmissionsPerMember?: number;
+  submissionDeadline?: Date | null; votingDeadline?: Date | null; readingDeadline?: Date | null;
+  winningBookId?: number | null;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  const updateData: Record<string, unknown> = {};
+  if (data.title !== undefined) updateData.title = data.title;
+  if (data.description !== undefined) updateData.description = data.description;
+  if (data.votingScheme !== undefined) updateData.votingScheme = data.votingScheme;
+  if (data.maxPageCount !== undefined) updateData.maxPageCount = data.maxPageCount;
+  if (data.allowPreviouslyRead !== undefined) updateData.allowPreviouslyRead = data.allowPreviouslyRead;
+  if (data.allowedGenres !== undefined) updateData.allowedGenres = data.allowedGenres;
+  if (data.minRating !== undefined) updateData.minRating = data.minRating;
+  if (data.anonymousSubmissions !== undefined) updateData.anonymousSubmissions = data.anonymousSubmissions;
+  if (data.maxTotalSubmissions !== undefined) updateData.maxTotalSubmissions = data.maxTotalSubmissions;
+  if (data.maxSubmissionsPerMember !== undefined) updateData.maxSubmissionsPerMember = data.maxSubmissionsPerMember;
+  if (data.submissionDeadline !== undefined) updateData.submissionDeadline = data.submissionDeadline;
+  if (data.votingDeadline !== undefined) updateData.votingDeadline = data.votingDeadline;
+  if (data.readingDeadline !== undefined) updateData.readingDeadline = data.readingDeadline;
+  if (data.winningBookId !== undefined) updateData.winningBookId = data.winningBookId;
+  if (Object.keys(updateData).length > 0) {
+    await db.update(events).set(updateData).where(eq(events.id, eventId));
+  }
+}
+
 export async function setEventWinner(eventId: number, bookId: number) {
   const db = await getDb();
   if (!db) return;

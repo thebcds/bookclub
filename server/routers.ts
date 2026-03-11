@@ -260,6 +260,57 @@ export const appRouter = router({
         await db.updateEventStatus(input.eventId, input.status);
         return { success: true };
       }),
+    update: protectedProcedure
+      .input(z.object({
+        groupId: z.number(), eventId: z.number(),
+        title: z.string().min(1).optional(),
+        description: z.string().optional(),
+        votingScheme: z.enum(["tournament", "simple_majority", "ranked_choice", "no_vote"]).optional(),
+        maxPageCount: z.number().positive().nullable().optional(),
+        allowPreviouslyRead: z.boolean().optional(),
+        allowedGenres: z.array(z.string()).nullable().optional(),
+        minRating: z.number().min(0).max(100).nullable().optional(),
+        anonymousSubmissions: z.boolean().optional(),
+        maxTotalSubmissions: z.number().min(1).max(64).optional(),
+        maxSubmissionsPerMember: z.number().min(1).max(64).optional(),
+        submissionDeadline: z.date().nullable().optional(),
+        votingDeadline: z.date().nullable().optional(),
+        readingDeadline: z.date().nullable().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await requireGroupAdmin(ctx.user.id, input.groupId);
+        const event = await db.getEventById(input.eventId);
+        if (!event) throw new TRPCError({ code: "NOT_FOUND" });
+        const { groupId, eventId, ...updateData } = input;
+        await db.updateEvent(eventId, updateData);
+        return { success: true };
+      }),
+    overrideWinner: protectedProcedure
+      .input(z.object({ groupId: z.number(), eventId: z.number(), bookId: z.number().nullable() }))
+      .mutation(async ({ ctx, input }) => {
+        await requireGroupAdmin(ctx.user.id, input.groupId);
+        const event = await db.getEventById(input.eventId);
+        if (!event) throw new TRPCError({ code: "NOT_FOUND" });
+        if (input.bookId) {
+          await db.setEventWinner(input.eventId, input.bookId);
+          await db.markBookAsRead(input.bookId);
+          const book = await db.getBookById(input.bookId);
+          try { await notifyOwner({ title: `Winner Override: ${book?.title}`, content: `Admin overrode the winner for "${event.title}" to "${book?.title}".` }); } catch {}
+        } else {
+          // Clear winner
+          await db.updateEvent(input.eventId, { winningBookId: null });
+        }
+        return { success: true };
+      }),
+    reopenSubmissions: protectedProcedure
+      .input(z.object({ groupId: z.number(), eventId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await requireGroupAdmin(ctx.user.id, input.groupId);
+        const event = await db.getEventById(input.eventId);
+        if (!event) throw new TRPCError({ code: "NOT_FOUND" });
+        await db.updateEventStatus(input.eventId, "submissions_open");
+        return { success: true };
+      }),
     startVoting: protectedProcedure
       .input(z.object({ groupId: z.number(), eventId: z.number() }))
       .mutation(async ({ ctx, input }) => {
