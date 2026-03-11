@@ -101,7 +101,9 @@ export default function EventDetailPage() {
       ? "Tournament Bracket"
       : event.votingScheme === "simple_majority"
         ? "Simple Majority"
-        : "Ranked Choice";
+        : event.votingScheme === "no_vote"
+          ? "No Vote"
+          : "Ranked Choice";
 
   return (
     <div className="space-y-6">
@@ -128,10 +130,10 @@ export default function EventDetailPage() {
             </Badge>
           </div>
         </div>
-        {isGroupAdmin && event.status === "submissions_open" && (
+        {isGroupAdmin && event.status === "submissions_open" && event.votingScheme !== "no_vote" && (
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">
-              {(subs?.length ?? 0)} / {event.maxSubmissions} submitted
+              {(subs?.length ?? 0)} / {event.maxTotalSubmissions} submitted
             </span>
             <Button
               onClick={() => startVoting.mutate({ groupId: gid!, eventId })}
@@ -146,6 +148,12 @@ export default function EventDetailPage() {
               Start Voting
             </Button>
           </div>
+        )}
+        {event.status === "submissions_open" && event.votingScheme === "no_vote" && (
+          <span className="text-sm text-muted-foreground">
+            {(subs?.length ?? 0)} / {event.maxTotalSubmissions} submitted
+            {event.maxTotalSubmissions === 1 && " (auto-completes on submission)"}
+          </span>
         )}
         {isGroupAdmin &&
           event.status === "voting" &&
@@ -190,7 +198,7 @@ export default function EventDetailPage() {
           <CardContent className="pt-4 pb-4">
             <p className="text-xs text-muted-foreground">Submissions</p>
             <p className="font-semibold">
-              {subs?.length ?? 0} / {event.maxSubmissions}
+              {subs?.length ?? 0} / {event.maxTotalSubmissions}
             </p>
           </CardContent>
         </Card>
@@ -453,12 +461,19 @@ function SubmissionsTab({
 
   return (
     <div className="space-y-4">
-      {event.status === "submissions_open" && !mySubmission && (
+      {event.status === "submissions_open" && (
+    (() => {
+      const mySubCount = Array.isArray(mySubmission) ? mySubmission.length : (mySubmission ? 1 : 0);
+      const perMemberLimit = event.maxSubmissionsPerMember ?? 1;
+      const totalSubs = subs?.length ?? 0;
+      const totalLimit = event.maxTotalSubmissions ?? 8;
+      const canSubmitMore = mySubCount < perMemberLimit && totalSubs < totalLimit;
+      return canSubmitMore ? (
         <Dialog open={showAddBook} onOpenChange={setShowAddBook}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
-              Submit a Book
+              Submit a Book {perMemberLimit > 1 && `(${mySubCount}/${perMemberLimit})`}
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -476,12 +491,16 @@ function SubmissionsTab({
             />
           </DialogContent>
         </Dialog>
-      )}
-      {mySubmission && event.status === "submissions_open" && (
+      ) : (
         <p className="text-sm text-muted-foreground flex items-center gap-2">
           <Check className="h-4 w-4 text-emerald-600" />
-          You&apos;ve submitted your book for this event.
+          {perMemberLimit > 1
+            ? `You've submitted ${mySubCount}/${perMemberLimit} books for this event.`
+            : "You've submitted your book for this event."
+          }
         </p>
+      );
+    })()
       )}
       {subs.length > 0 ? (
         <div className="grid gap-3">

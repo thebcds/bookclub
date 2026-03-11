@@ -1,0 +1,1 @@
+ALTER TABLE `events` MODIFY COLUMN `votingScheme` enum('tournament','simple_majority','ranked_choice','no_vote') NOT NULL;

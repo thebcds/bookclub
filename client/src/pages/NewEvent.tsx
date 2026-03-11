@@ -13,10 +13,15 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useGroup } from "@/contexts/GroupContext";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, Info } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const GENRES = [
   "Fiction",
@@ -36,20 +41,32 @@ const GENRES = [
   "Young Adult",
 ];
 
+type VotingScheme = "tournament" | "simple_majority" | "ranked_choice" | "no_vote";
+
+const SCHEME_DESCRIPTIONS: Record<VotingScheme, string> = {
+  tournament:
+    "Books are seeded into a bracket and members vote on each matchup. Previously submitted books get seeding advantages.",
+  simple_majority:
+    "Each member votes for one book. The book with the most votes wins.",
+  ranked_choice:
+    "Members rank all books. Lowest-ranked books are eliminated until one has a majority.",
+  no_vote:
+    "No voting takes place. Use for single-title selection or random pick from submissions.",
+};
+
 export default function NewEventPage() {
   const [, setLocation] = useLocation();
   const { activeGroup } = useGroup();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [votingScheme, setVotingScheme] = useState<
-    "tournament" | "simple_majority" | "ranked_choice"
-  >("tournament");
+  const [votingScheme, setVotingScheme] = useState<VotingScheme>("tournament");
   const [maxPageCount, setMaxPageCount] = useState("");
   const [allowPreviouslyRead, setAllowPreviouslyRead] = useState(false);
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [minRating, setMinRating] = useState("");
   const [anonymousSubmissions, setAnonymousSubmissions] = useState(false);
-  const [maxSubmissions, setMaxSubmissions] = useState("8");
+  const [maxTotalSubmissions, setMaxTotalSubmissions] = useState("8");
+  const [maxSubmissionsPerMember, setMaxSubmissionsPerMember] = useState("1");
   const [submissionDeadline, setSubmissionDeadline] = useState("");
   const [votingDeadline, setVotingDeadline] = useState("");
   const [readingDeadline, setReadingDeadline] = useState("");
@@ -69,6 +86,15 @@ export default function NewEventPage() {
       return;
     }
     if (!activeGroup) return;
+
+    const totalSubs = parseInt(maxTotalSubmissions) || 8;
+    const perMember = parseInt(maxSubmissionsPerMember) || 1;
+
+    if (perMember > totalSubs) {
+      toast.error("Per-member limit cannot exceed total submissions");
+      return;
+    }
+
     createEvent.mutate({
       groupId: activeGroup.id,
       title: title.trim(),
@@ -79,7 +105,8 @@ export default function NewEventPage() {
       allowedGenres: selectedGenres.length > 0 ? selectedGenres : undefined,
       minRating: minRating ? parseInt(minRating) : undefined,
       anonymousSubmissions,
-      maxSubmissions: parseInt(maxSubmissions) || 8,
+      maxTotalSubmissions: totalSubs,
+      maxSubmissionsPerMember: perMember,
       submissionDeadline: submissionDeadline
         ? new Date(submissionDeadline)
         : undefined,
@@ -93,6 +120,8 @@ export default function NewEventPage() {
       prev.includes(genre) ? prev.filter((g) => g !== genre) : [...prev, genre]
     );
   };
+
+  const isSingleTitle = votingScheme === "no_vote" && parseInt(maxTotalSubmissions) === 1;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -134,14 +163,16 @@ export default function NewEventPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Voting Scheme</Label>
+              <Label>Selection Method</Label>
               <Select
                 value={votingScheme}
-                onValueChange={(v) =>
-                  setVotingScheme(
-                    v as "tournament" | "simple_majority" | "ranked_choice"
-                  )
-                }
+                onValueChange={(v) => {
+                  setVotingScheme(v as VotingScheme);
+                  if (v === "no_vote") {
+                    setMaxTotalSubmissions("1");
+                    setMaxSubmissionsPerMember("1");
+                  }
+                }}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -156,26 +187,79 @@ export default function NewEventPage() {
                   <SelectItem value="ranked_choice">
                     Ranked Choice
                   </SelectItem>
+                  <SelectItem value="no_vote">
+                    No Vote (Direct Selection)
+                  </SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                {votingScheme === "tournament" &&
-                  "Books are seeded into a bracket and members vote on each matchup. Previously submitted books get seeding advantages."}
-                {votingScheme === "simple_majority" &&
-                  "Each member votes for one book. The book with the most votes wins."}
-                {votingScheme === "ranked_choice" &&
-                  "Members rank all books. Lowest-ranked books are eliminated until one has a majority."}
+                {SCHEME_DESCRIPTIONS[votingScheme]}
               </p>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Submission Quantity</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="maxSubs">Max Submissions</Label>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="maxTotalSubs">Total Submissions</Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="max-w-xs text-xs">
+                      The maximum number of book titles that can be submitted to this event.
+                      {votingScheme === "no_vote" && " Set to 1 for a single-title direct selection with no voting."}
+                      {votingScheme === "tournament" && " For tournament brackets, 8 is the standard."}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               <Input
-                id="maxSubs"
+                id="maxTotalSubs"
                 type="number"
-                min="2"
+                min={votingScheme === "no_vote" ? "1" : "2"}
                 max="64"
-                value={maxSubmissions}
-                onChange={(e) => setMaxSubmissions(e.target.value)}
+                value={maxTotalSubmissions}
+                onChange={(e) => setMaxTotalSubmissions(e.target.value)}
+              />
+              {isSingleTitle && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                  Single-title mode: The event will auto-complete when one book is submitted. No voting will occur.
+                </p>
+              )}
+              {votingScheme === "no_vote" && parseInt(maxTotalSubmissions) > 1 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                  Multiple submissions with no vote: A winner will be randomly selected when all submissions are in.
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="maxPerMember">Submissions Per Member</Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="max-w-xs text-xs">
+                      How many books each member can submit. Set to 1 for one book per person, or higher to allow multiple submissions per member.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <Input
+                id="maxPerMember"
+                type="number"
+                min="1"
+                max={maxTotalSubmissions}
+                value={maxSubmissionsPerMember}
+                onChange={(e) => setMaxSubmissionsPerMember(e.target.value)}
               />
             </div>
           </CardContent>
@@ -271,15 +355,17 @@ export default function NewEventPage() {
                 onChange={(e) => setSubmissionDeadline(e.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="voteDeadline">Voting Deadline</Label>
-              <Input
-                id="voteDeadline"
-                type="datetime-local"
-                value={votingDeadline}
-                onChange={(e) => setVotingDeadline(e.target.value)}
-              />
-            </div>
+            {votingScheme !== "no_vote" && (
+              <div className="space-y-2">
+                <Label htmlFor="voteDeadline">Voting Deadline</Label>
+                <Input
+                  id="voteDeadline"
+                  type="datetime-local"
+                  value={votingDeadline}
+                  onChange={(e) => setVotingDeadline(e.target.value)}
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="readDeadline">Reading Deadline</Label>
               <Input

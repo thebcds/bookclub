@@ -88,6 +88,7 @@ export const events = mysqlTable("events", {
     "tournament",
     "simple_majority",
     "ranked_choice",
+    "no_vote",
   ]).notNull(),
   status: mysqlEnum("status", [
     "submissions_open",
@@ -102,7 +103,8 @@ export const events = mysqlTable("events", {
   allowedGenres: json("allowedGenres"),
   minRating: int("minRating"),
   anonymousSubmissions: boolean("anonymousSubmissions").default(false).notNull(),
-  maxSubmissions: int("maxSubmissions").default(8).notNull(),
+  maxTotalSubmissions: int("maxTotalSubmissions").default(8).notNull(),
+  maxSubmissionsPerMember: int("maxSubmissionsPerMember").default(1).notNull(),
   submissionDeadline: timestamp("submissionDeadline"),
   votingDeadline: timestamp("votingDeadline"),
   readingDeadline: timestamp("readingDeadline"),

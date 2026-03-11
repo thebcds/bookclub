@@ -215,10 +215,12 @@ export const appRouter = router({
     create: protectedProcedure
       .input(z.object({
         groupId: z.number(), title: z.string().min(1), description: z.string().optional(),
-        votingScheme: z.enum(["tournament", "simple_majority", "ranked_choice"]),
+        votingScheme: z.enum(["tournament", "simple_majority", "ranked_choice", "no_vote"]),
         maxPageCount: z.number().positive().optional(), allowPreviouslyRead: z.boolean().default(false),
         allowedGenres: z.array(z.string()).optional(), minRating: z.number().min(0).max(100).optional(),
-        anonymousSubmissions: z.boolean().default(false), maxSubmissions: z.number().min(2).max(64).default(8),
+        anonymousSubmissions: z.boolean().default(false),
+        maxTotalSubmissions: z.number().min(1).max(64).default(8),
+        maxSubmissionsPerMember: z.number().min(1).max(64).default(1),
         submissionDeadline: z.date().optional(), votingDeadline: z.date().optional(), readingDeadline: z.date().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -283,10 +285,14 @@ export const appRouter = router({
         const event = await db.getEventById(input.eventId);
         if (!event) throw new TRPCError({ code: "NOT_FOUND" });
         if (event.status !== "submissions_open") throw new TRPCError({ code: "BAD_REQUEST", message: "Submissions are closed" });
-        const existing = await db.getUserSubmissionForEvent(input.eventId, ctx.user.id);
-        if (existing) throw new TRPCError({ code: "BAD_REQUEST", message: "You already submitted a book" });
+        // Check per-member submission limit
+        const userSubs = await db.getUserSubmissionsForEvent(input.eventId, ctx.user.id);
+        if (userSubs.length >= event.maxSubmissionsPerMember) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `You've reached your submission limit (${event.maxSubmissionsPerMember} per member)` });
+        }
+        // Check total submission limit
         const subs = await db.getEventSubmissions(input.eventId);
-        if (subs.length >= event.maxSubmissions) throw new TRPCError({ code: "BAD_REQUEST", message: "Maximum submissions reached" });
+        if (subs.length >= event.maxTotalSubmissions) throw new TRPCError({ code: "BAD_REQUEST", message: "Maximum total submissions reached" });
         const book = await db.getBookById(input.bookId);
         if (!book) throw new TRPCError({ code: "NOT_FOUND", message: "Book not found" });
         if (event.maxPageCount && book.pageCount && book.pageCount > event.maxPageCount) throw new TRPCError({ code: "BAD_REQUEST", message: `Book exceeds max page count of ${event.maxPageCount}` });
@@ -296,6 +302,28 @@ export const appRouter = router({
         }
         if (event.minRating && book.rating && book.rating < event.minRating) throw new TRPCError({ code: "BAD_REQUEST", message: `Book rating ${book.rating} is below minimum ${event.minRating}` });
         const id = await db.createSubmission({ eventId: input.eventId, bookId: input.bookId, submittedBy: ctx.user.id, isAnonymous: event.anonymousSubmissions || input.isAnonymous });
+        // For no_vote mode with single submission: auto-complete the event
+        if (event.votingScheme === "no_vote" && event.maxTotalSubmissions === 1) {
+          await db.updateEventStatus(input.eventId, "completed");
+          await db.setEventWinner(input.eventId, input.bookId);
+          await db.markBookAsRead(input.bookId);
+          await db.recordSubmissionHistory(input.bookId, input.eventId, true);
+          try { await notifyOwner({ title: `Book Selected: ${book.title}`, content: `"${book.title}" by ${book.author} was selected for "${event.title}" (single-title mode).` }); } catch {}
+        }
+        // For no_vote mode when all submissions are in: auto-complete with random pick
+        else if (event.votingScheme === "no_vote" && (subs.length + 1) >= event.maxTotalSubmissions) {
+          // Pick a random winner from all submissions including the one just created
+          const allBookIds = [...subs.map(s => s.bookId), input.bookId];
+          const winnerId = allBookIds[Math.floor(Math.random() * allBookIds.length)];
+          await db.updateEventStatus(input.eventId, "completed");
+          await db.setEventWinner(input.eventId, winnerId);
+          await db.markBookAsRead(winnerId);
+          for (const bid of allBookIds) {
+            await db.recordSubmissionHistory(bid, input.eventId, bid === winnerId);
+          }
+          const winnerBook = await db.getBookById(winnerId);
+          try { await notifyOwner({ title: `Book Selected: ${winnerBook?.title}`, content: `"${winnerBook?.title}" was randomly selected from ${allBookIds.length} submissions for "${event.title}".` }); } catch {}
+        }
         return { id };
       }),
     listForEvent: protectedProcedure
@@ -307,6 +335,11 @@ export const appRouter = router({
       .input(z.object({ eventId: z.number() }))
       .query(async ({ ctx, input }) => {
         return db.getUserSubmissionForEvent(input.eventId, ctx.user.id);
+      }),
+    mySubmissions: protectedProcedure
+      .input(z.object({ eventId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return db.getUserSubmissionsForEvent(input.eventId, ctx.user.id);
       }),
   }),
 

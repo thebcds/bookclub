@@ -205,9 +205,10 @@ export async function markBookAsRead(bookId: number) {
 
 // ─── Events (group-scoped) ──────────────────────────────────────────
 export async function createEvent(data: {
-  groupId: number; title: string; description?: string; votingScheme: "tournament" | "simple_majority" | "ranked_choice";
+  groupId: number; title: string; description?: string; votingScheme: "tournament" | "simple_majority" | "ranked_choice" | "no_vote";
   maxPageCount?: number; allowPreviouslyRead?: boolean; allowedGenres?: string[]; minRating?: number;
-  anonymousSubmissions?: boolean; maxSubmissions?: number; submissionDeadline?: Date; votingDeadline?: Date; readingDeadline?: Date; createdBy: number;
+  anonymousSubmissions?: boolean; maxTotalSubmissions?: number; maxSubmissionsPerMember?: number;
+  submissionDeadline?: Date; votingDeadline?: Date; readingDeadline?: Date; createdBy: number;
 }) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
@@ -289,6 +290,12 @@ export async function getUserSubmissionForEvent(eventId: number, userId: number)
   if (!db) return null;
   const result = await db.select().from(submissions).where(and(eq(submissions.eventId, eventId), eq(submissions.submittedBy, userId))).limit(1);
   return result[0] ?? null;
+}
+
+export async function getUserSubmissionsForEvent(eventId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(submissions).where(and(eq(submissions.eventId, eventId), eq(submissions.submittedBy, userId)));
 }
 
 // ─── Submission History ─────────────────────────────────────────────

@@ -99,3 +99,15 @@
 - [x] Enable switchable theme in ThemeProvider
 - [x] Theme toggle button in sidebar footer with animated switch
 - [x] Persist theme preference across sessions via localStorage
+
+## Customizable Submission Quantity (v3.2)
+- [x] Add maxTotalSubmissions column to events table (total titles allowed for the event)
+- [x] Add maxSubmissionsPerMember column to events table (how many each member can submit)
+- [x] Add no_vote voting scheme (direct selection, no voting)
+- [x] Enforce submission limits in backend (per-member and total)
+- [x] Update event creation form with submission quantity fields and tooltips
+- [x] Show submission count / limits on event detail page
+- [x] Auto-complete event when single submission received in no-vote mode
+- [x] Per-member multi-submission support with counter on Submit button
+- [x] Hide Start Voting button for no_vote events
+- [x] All 51 tests passing
