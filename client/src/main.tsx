@@ -18,6 +18,9 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
 
   if (!isUnauthorized) return;
 
+  // Don't auto-redirect on invite pages — let the InviteAccept component handle login
+  if (window.location.pathname.startsWith("/invite/")) return;
+
   window.location.href = getLoginUrl();
 };
 

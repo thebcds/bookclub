@@ -140,3 +140,9 @@
 
 ## Invite Link Visibility Fix (v3.6)
 - [x] Add copy link button to each pending invitation in Members page
+
+## Invite Link Auth Fix (v3.7)
+- [x] Fix invite link authorization error for users on different accounts
+- [x] Stop global auto-redirect to login on invite pages
+- [x] Preserve return path (invite URL) through OAuth login flow
+- [x] All 58 tests passing

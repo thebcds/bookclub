@@ -69,11 +69,14 @@ export default function InviteAcceptPage() {
               You&apos;re Invited!
             </h2>
             <p className="text-muted-foreground text-sm">
-              Sign in to accept your book club invitation.
+              You&apos;ve been invited to join{" "}
+              <strong>{verification.invitation?.groupName || "a book club"}</strong>.
+              Sign in to accept the invitation.
             </p>
             <Button
               onClick={() => {
-                window.location.href = getLoginUrl();
+                // Pass the current invite path so user returns here after login
+                window.location.href = getLoginUrl(`/invite/${token}`);
               }}
               className="w-full"
             >
