@@ -158,8 +158,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: { children: React
               </button>
               {!isCollapsed && (
                 <div className="flex items-center gap-2 min-w-0">
-                  <BookOpen className="h-5 w-5 text-primary shrink-0" />
-                  <span className="font-serif font-bold tracking-tight truncate text-foreground">Book Club</span>
+                  <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663326243662/JtwK2AToo98P6Ad64BKFob/boox-logo-LjnXNVcKWD4yqdihhLuybP.webp" alt="boox" className="h-7 shrink-0" />
                 </div>
               )}
             </div>

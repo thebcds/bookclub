@@ -152,3 +152,7 @@
 - [x] Add revoke/cancel button for pending invitations
 - [x] Show accepted invitations history (who accepted which invite and when)
 - [x] Write tests for revoke and invitation history (63 total passing)
+
+## Logo (v3.9)
+- [x] Generate boox logo with book club theme
+- [x] Set as app logo in sidebar
