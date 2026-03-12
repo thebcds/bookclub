@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useGroup } from "@/contexts/GroupContext";
 import { trpc } from "@/lib/trpc";
 import { Switch } from "@/components/ui/switch";
-import { AlertTriangle, Crown, Globe, Loader2, Lock, Save, Shield, Trash2, UserMinus, LogOut } from "lucide-react";
+import { AlertTriangle, Camera, Crown, Globe, Loader2, Lock, Save, Shield, Trash2, UserMinus, LogOut } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -37,6 +37,7 @@ export default function GroupSettings() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isPublic, setIsPublic] = useState(false);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [transferTarget, setTransferTarget] = useState<string>("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
@@ -46,8 +47,34 @@ export default function GroupSettings() {
       setName(group.name);
       setDescription(group.description ?? "");
       setIsPublic(group.isPublic ?? false);
+      setCoverPreview(group.coverUrl ?? null);
     }
   }, [group]);
+
+  const uploadCover = trpc.groups.uploadCover.useMutation({
+    onSuccess: (data) => {
+      toast.success("Cover image updated");
+      setCoverPreview(data.url);
+      utils.groups.getById.invalidate({ id: activeGroupId! });
+      utils.groups.myGroups.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be under 5MB");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(",")[1];
+      uploadCover.mutate({ groupId: activeGroupId!, imageData: base64, mimeType: file.type });
+    };
+    reader.readAsDataURL(file);
+  };
 
   const updateGroup = trpc.groups.update.useMutation({
     onSuccess: () => {
@@ -121,7 +148,7 @@ export default function GroupSettings() {
     <div className="container max-w-3xl py-8 space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Group Settings</h1>
-        <p className="text-muted-foreground mt-1">Manage your book club group</p>
+        <p className="text-muted-foreground mt-1">Manage your group settings</p>
       </div>
 
       {/* General Settings */}
@@ -135,9 +162,30 @@ export default function GroupSettings() {
             <CardDescription>Update your group name and description</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Cover Image */}
+            <div className="space-y-2">
+              <Label>Cover Image</Label>
+              <div className="relative rounded-lg border overflow-hidden bg-muted/30">
+                {coverPreview ? (
+                  <img src={coverPreview} alt="Group cover" className="w-full h-32 object-cover" />
+                ) : (
+                  <div className="w-full h-32 flex items-center justify-center text-muted-foreground">
+                    <Camera className="h-8 w-8 opacity-40" />
+                  </div>
+                )}
+                <label className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 hover:opacity-100 transition-opacity cursor-pointer">
+                  <span className="text-white text-sm font-medium flex items-center gap-2">
+                    {uploadCover.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                    {coverPreview ? "Change Cover" : "Upload Cover"}
+                  </span>
+                  <input type="file" accept="image/*" className="hidden" onChange={handleCoverUpload} disabled={uploadCover.isPending} />
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">Recommended: 1200x400px, max 5MB. Visible on the Discover page for public groups.</p>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="name">Group Name</Label>
-              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="My Book Club" />
+              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="My Reading Group" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="desc">Description</Label>
@@ -278,7 +326,7 @@ export default function GroupSettings() {
               <LogOut className="h-5 w-5" />
               Leave Group
             </CardTitle>
-            <CardDescription>Leave this book club group. You can rejoin later with an invitation.</CardDescription>
+            <CardDescription>Leave this group. You can rejoin later with an invitation.</CardDescription>
           </CardHeader>
           <CardContent>
             <Button

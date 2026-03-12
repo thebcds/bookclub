@@ -826,3 +826,105 @@ describe("invitation management", () => {
     ).rejects.toThrow();
   });
 });
+
+// ─── Bulk Invite Tests ──────────────────────────────────────────────
+describe("bulk invitations", () => {
+  it("admin can create bulk invitations", async () => {
+    const adminCaller = appRouter.createCaller(createCtx(createAdminUser()));
+    const results = await adminCaller.invitations.bulkCreate({
+      groupId: 1,
+      emails: ["bulk1@example.com", "bulk2@example.com", "bulk3@example.com"],
+      role: "member",
+    });
+    expect(results).toHaveLength(3);
+    expect(results[0].email).toBe("bulk1@example.com");
+    expect(results[0].token).toBeDefined();
+    expect(results[1].email).toBe("bulk2@example.com");
+    expect(results[2].email).toBe("bulk3@example.com");
+  });
+
+  it("non-admin cannot create bulk invitations", async () => {
+    const memberCaller = appRouter.createCaller(createCtx(createMockUser()));
+    await expect(
+      memberCaller.invitations.bulkCreate({
+        groupId: 1,
+        emails: ["test@example.com"],
+        role: "member",
+      })
+    ).rejects.toThrow();
+  });
+
+  it("rejects empty email list", async () => {
+    const adminCaller = appRouter.createCaller(createCtx(createAdminUser()));
+    await expect(
+      adminCaller.invitations.bulkCreate({
+        groupId: 1,
+        emails: [],
+        role: "member",
+      })
+    ).rejects.toThrow();
+  });
+});
+
+// ─── Remove Member Tests ────────────────────────────────────────────
+describe("remove member", () => {
+  it("admin can remove a member", async () => {
+    const adminCaller = appRouter.createCaller(createCtx(createAdminUser()));
+    const result = await adminCaller.groupSettings.removeMember({
+      groupId: 1,
+      userId: 1,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("admin cannot remove themselves", async () => {
+    const adminCaller = appRouter.createCaller(createCtx(createAdminUser()));
+    await expect(
+      adminCaller.groupSettings.removeMember({
+        groupId: 1,
+        userId: 99,
+      })
+    ).rejects.toThrow("Cannot remove yourself");
+  });
+
+  it("non-admin cannot remove members", async () => {
+    const memberCaller = appRouter.createCaller(createCtx(createMockUser()));
+    await expect(
+      memberCaller.groupSettings.removeMember({
+        groupId: 1,
+        userId: 99,
+      })
+    ).rejects.toThrow();
+  });
+});
+
+// ─── Group Cover Image Tests ────────────────────────────────────────
+describe("group cover image", () => {
+  it("admin can update group with coverUrl", async () => {
+    const adminCaller = appRouter.createCaller(createCtx(createAdminUser()));
+    const result = await adminCaller.groups.update({
+      groupId: 1,
+      coverUrl: "https://example.com/cover.jpg",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("admin can clear coverUrl", async () => {
+    const adminCaller = appRouter.createCaller(createCtx(createAdminUser()));
+    const result = await adminCaller.groups.update({
+      groupId: 1,
+      coverUrl: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("non-admin cannot update cover", async () => {
+    const memberCaller = appRouter.createCaller(createCtx(createMockUser()));
+    await expect(
+      memberCaller.groups.update({
+        groupId: 1,
+        coverUrl: "https://example.com/cover.jpg",
+      })
+    ).rejects.toThrow();
+  });
+});

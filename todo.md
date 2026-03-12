@@ -163,3 +163,13 @@
 
 ## Logo Size (v3.11)
 - [x] Double the logo size in sidebar (h-10 → h-20)
+
+## Major Update (v4.0)
+- [x] Bulk invite — paste multiple emails to create several invitations at once
+- [x] Remove members — admin can remove members from the group on Members page
+- [x] Group cover images — upload group photo for Discover page
+- [x] Rebrand to "boox" — update browser tab title and all "Book Club Portal" references
+- [x] Generate and set favicon
+- [x] Dark/retro mode logo variant — lighter version visible on dark backgrounds
+- [x] Public landing page for non-logged-in visitors
+- [x] All 72 tests passing

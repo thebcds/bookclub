@@ -1,3 +1,4 @@
+import { useAuth } from "@/_core/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,13 +20,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { useGroup } from "@/contexts/GroupContext";
 import { trpc } from "@/lib/trpc";
-import { Check, CheckCircle2, Copy, History, Loader2, Plus, Shield, Trash2, Users, X } from "lucide-react";
+import { Check, CheckCircle2, Copy, History, Loader2, Plus, Shield, Trash2, UserMinus, Users, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 export default function MembersPage() {
+  const { user } = useAuth();
   const { activeGroup, isGroupAdmin } = useGroup();
   const gid = activeGroup?.id ?? 0;
   const { data: members, isLoading } = trpc.members.list.useQuery(
@@ -40,7 +44,20 @@ export default function MembersPage() {
     { groupId: gid },
     { enabled: !!activeGroup && isGroupAdmin }
   );
+  const { data: group } = trpc.groups.getById.useQuery(
+    { id: gid },
+    { enabled: !!activeGroup }
+  );
   const [showInvite, setShowInvite] = useState(false);
+  const utils = trpc.useUtils();
+
+  const removeMember = trpc.groupSettings.removeMember.useMutation({
+    onSuccess: () => {
+      toast.success("Member removed");
+      utils.members.list.invalidate({ groupId: gid });
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   if (!activeGroup) {
     return (
@@ -65,12 +82,12 @@ export default function MembersPage() {
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
-                Invite Member
+                Invite Members
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="sm:max-w-lg">
               <DialogHeader>
-                <DialogTitle>Invite a Member</DialogTitle>
+                <DialogTitle>Invite Members</DialogTitle>
               </DialogHeader>
               <InviteForm
                 groupId={gid}
@@ -116,6 +133,21 @@ export default function MembersPage() {
                     Joined{" "}
                     {new Date(member.joinedAt).toLocaleDateString()}
                   </span>
+                  {isGroupAdmin && member.id !== user?.id && member.id !== group?.createdBy && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
+                      onClick={() => {
+                        if (confirm(`Remove ${member.name ?? "this member"} from the group?`)) {
+                          removeMember.mutate({ groupId: gid, userId: member.id });
+                        }
+                      }}
+                      disabled={removeMember.isPending}
+                    >
+                      <UserMinus className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -242,10 +274,14 @@ function InvitationRow({ invitation, groupId }: { invitation: { id: number; toke
 }
 
 function InviteForm({ groupId, onSuccess }: { groupId: number; onSuccess: () => void }) {
+  const [mode, setMode] = useState<"single" | "bulk">("single");
   const [email, setEmail] = useState("");
+  const [bulkEmails, setBulkEmails] = useState("");
   const [role, setRole] = useState<"member" | "admin">("member");
   const [inviteLink, setInviteLink] = useState("");
+  const [bulkResults, setBulkResults] = useState<{ email: string; token: string }[]>([]);
   const [copied, setCopied] = useState(false);
+  const [copiedBulk, setCopiedBulk] = useState<string | null>(null);
   const utils = trpc.useUtils();
 
   const createInvite = trpc.invitations.create.useMutation({
@@ -258,13 +294,39 @@ function InviteForm({ groupId, onSuccess }: { groupId: number; onSuccess: () => 
     onError: (err) => toast.error(err.message),
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const bulkCreate = trpc.invitations.bulkCreate.useMutation({
+    onSuccess: (data) => {
+      setBulkResults(data.map(d => ({ email: d.email, token: d.token })));
+      toast.success(`${data.length} invitation(s) created!`);
+      utils.invitations.list.invalidate({ groupId });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleSingleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     createInvite.mutate({
       groupId,
       email: email.trim() || undefined,
       role,
     });
+  };
+
+  const handleBulkSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const emails = bulkEmails
+      .split(/[\n,;]+/)
+      .map(e => e.trim())
+      .filter(e => e.length > 0 && e.includes("@"));
+    if (emails.length === 0) {
+      toast.error("Please enter at least one valid email address");
+      return;
+    }
+    if (emails.length > 50) {
+      toast.error("Maximum 50 emails at a time");
+      return;
+    }
+    bulkCreate.mutate({ groupId, emails, role });
   };
 
   const copyLink = () => {
@@ -274,6 +336,23 @@ function InviteForm({ groupId, onSuccess }: { groupId: number; onSuccess: () => 
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const copyBulkLink = (token: string, email: string) => {
+    const link = `${window.location.origin}/invite/${token}`;
+    navigator.clipboard.writeText(link);
+    setCopiedBulk(email);
+    toast.success(`Link for ${email} copied!`);
+    setTimeout(() => setCopiedBulk(null), 2000);
+  };
+
+  const copyAllBulkLinks = () => {
+    const allLinks = bulkResults
+      .map(r => `${r.email}: ${window.location.origin}/invite/${r.token}`)
+      .join("\n");
+    navigator.clipboard.writeText(allLinks);
+    toast.success("All invite links copied!");
+  };
+
+  // Single invite result
   if (inviteLink) {
     return (
       <div className="space-y-4">
@@ -300,45 +379,140 @@ function InviteForm({ groupId, onSuccess }: { groupId: number; onSuccess: () => 
     );
   }
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label>Email (optional)</Label>
-        <Input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="member@example.com"
-        />
+  // Bulk invite results
+  if (bulkResults.length > 0) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {bulkResults.length} invitation(s) created:
+          </p>
+          <Button variant="outline" size="sm" onClick={copyAllBulkLinks} className="gap-1.5">
+            <Copy className="h-3.5 w-3.5" />
+            Copy All Links
+          </Button>
+        </div>
+        <div className="space-y-2 max-h-64 overflow-y-auto">
+          {bulkResults.map((r) => (
+            <div key={r.email} className="flex items-center justify-between p-2 rounded border text-sm">
+              <span className="truncate flex-1 mr-2">{r.email}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => copyBulkLink(r.token, r.email)}
+                className="gap-1 shrink-0 h-7"
+              >
+                {copiedBulk === r.email ? (
+                  <><Check className="h-3 w-3 text-emerald-600" /> Copied</>
+                ) : (
+                  <><Copy className="h-3 w-3" /> Copy</>
+                )}
+              </Button>
+            </div>
+          ))}
+        </div>
         <p className="text-xs text-muted-foreground">
-          Leave empty to generate a shareable invite link
+          All links expire in 7 days.
         </p>
+        <Button variant="outline" className="w-full" onClick={onSuccess}>
+          Done
+        </Button>
       </div>
-      <div className="space-y-2">
-        <Label>Role</Label>
-        <Select
-          value={role}
-          onValueChange={(v) => setRole(v as "member" | "admin")}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="member">Member</SelectItem>
-            <SelectItem value="admin">Admin</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <Button
-        type="submit"
-        className="w-full"
-        disabled={createInvite.isPending}
-      >
-        {createInvite.isPending && (
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-        )}
-        Create Invitation
-      </Button>
-    </form>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Tabs value={mode} onValueChange={(v) => setMode(v as "single" | "bulk")}>
+        <TabsList className="w-full">
+          <TabsTrigger value="single" className="flex-1">Single Invite</TabsTrigger>
+          <TabsTrigger value="bulk" className="flex-1">Bulk Invite</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="single">
+          <form onSubmit={handleSingleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Email (optional)</Label>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="member@example.com"
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave empty to generate a shareable invite link
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select
+                value={role}
+                onValueChange={(v) => setRole(v as "member" | "admin")}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="member">Member</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={createInvite.isPending}
+            >
+              {createInvite.isPending && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              Create Invitation
+            </Button>
+          </form>
+        </TabsContent>
+
+        <TabsContent value="bulk">
+          <form onSubmit={handleBulkSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Email Addresses</Label>
+              <Textarea
+                value={bulkEmails}
+                onChange={(e) => setBulkEmails(e.target.value)}
+                placeholder={"alice@example.com\nbob@example.com\ncharlie@example.com"}
+                rows={5}
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter one email per line, or separate with commas. Max 50 at a time.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select
+                value={role}
+                onValueChange={(v) => setRole(v as "member" | "admin")}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="member">Member</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={bulkCreate.isPending}
+            >
+              {bulkCreate.isPending && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              Create {bulkEmails.split(/[\n,;]+/).filter(e => e.trim().includes("@")).length || 0} Invitation(s)
+            </Button>
+          </form>
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

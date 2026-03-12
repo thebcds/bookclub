@@ -1,3 +1,4 @@
+import { useAuth } from "@/_core/hooks/useAuth";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
@@ -11,6 +12,7 @@ import CalendarPage from "./pages/Calendar";
 import ChatPage from "./pages/Chat";
 import Home from "./pages/Home";
 import InviteAcceptPage from "./pages/InviteAccept";
+import LandingPage from "./pages/Landing";
 import MembersPage from "./pages/Members";
 import EventDetailPage from "./pages/EventDetail";
 import EventsPage from "./pages/Events";
@@ -42,11 +44,21 @@ function DashboardRouter() {
   );
 }
 
+function AuthGate() {
+  const { loading, user } = useAuth();
+
+  if (loading) return null;
+
+  if (!user) return <LandingPage />;
+
+  return <DashboardRouter />;
+}
+
 function Router() {
   return (
     <Switch>
       <Route path="/invite/:token" component={InviteAcceptPage} />
-      <Route component={DashboardRouter} />
+      <Route component={AuthGate} />
     </Switch>
   );
 }

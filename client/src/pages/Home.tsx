@@ -51,11 +51,11 @@ export default function Home() {
       <div className="flex flex-col items-center justify-center py-20 space-y-6">
         <div className="text-center space-y-2">
           <BookOpen className="h-16 w-16 mx-auto text-primary/40" />
-          <h1 className="text-2xl font-serif font-bold">Welcome to Book Club</h1>
+          <h1 className="text-2xl font-serif font-bold">Welcome to boox</h1>
           <p className="text-muted-foreground max-w-md">
             {groups.length === 0
-              ? "Create your first book club group to get started, or accept an invitation to join an existing one."
-              : "Select a group from the sidebar to view your book club dashboard."}
+              ? "Create your first group to get started, or accept an invitation to join an existing one."
+              : "Select a group from the sidebar to view your dashboard."}
           </p>
         </div>
         {groups.length === 0 && (

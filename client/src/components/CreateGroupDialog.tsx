@@ -46,9 +46,9 @@ export default function CreateGroupDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-serif">Create a Book Club</DialogTitle>
+          <DialogTitle className="font-serif">Create a Group</DialogTitle>
           <DialogDescription>
-            Start a new book club group. You&apos;ll be the admin and can invite
+            Start a new group. You&apos;ll be the admin and can invite
             members.
           </DialogDescription>
         </DialogHeader>

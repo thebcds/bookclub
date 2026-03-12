@@ -130,13 +130,14 @@ export async function addGroupMember(groupId: number, userId: number, role: "adm
   return result[0].insertId;
 }
 
-export async function updateGroup(id: number, data: { name?: string; description?: string; isPublic?: boolean }) {
+export async function updateGroup(id: number, data: { name?: string; description?: string; isPublic?: boolean; coverUrl?: string | null }) {
   const db = await getDb();
   if (!db) return;
   const updateData: Record<string, unknown> = {};
   if (data.name !== undefined) updateData.name = data.name;
   if (data.description !== undefined) updateData.description = data.description;
   if (data.isPublic !== undefined) updateData.isPublic = data.isPublic;
+  if (data.coverUrl !== undefined) updateData.coverUrl = data.coverUrl;
   if (Object.keys(updateData).length > 0) {
     await db.update(groups).set(updateData).where(eq(groups.id, id));
   }
@@ -151,6 +152,7 @@ export async function getPublicGroups(excludeUserId?: number) {
       name: groups.name,
       description: groups.description,
       isPublic: groups.isPublic,
+      coverUrl: groups.coverUrl,
       createdBy: groups.createdBy,
       createdAt: groups.createdAt,
       memberCount: sql<number>`(SELECT COUNT(*) FROM ${groupMembers} WHERE ${groupMembers.groupId} = ${groups.id})`,

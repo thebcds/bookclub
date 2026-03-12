@@ -88,12 +88,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
           <div className="flex flex-col items-center gap-4">
-            <div className="flex items-center gap-3">
-              <BookOpen className="h-10 w-10 text-primary" />
-              <h1 className="text-3xl font-serif font-bold tracking-tight text-foreground">Book Club</h1>
-            </div>
+            <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663326243662/JtwK2AToo98P6Ad64BKFob/boox-logo-transparent-dZxnjsPjNpHQaCKCVpKKLE.png" alt="boox" className="h-24" />
             <p className="text-sm text-muted-foreground text-center max-w-sm">
-              Sign in to access the book club portal. Manage events, vote on books, and join the discussion.
+              Sign in to access boox. Manage events, vote on books, and join the discussion.
             </p>
           </div>
           <Button onClick={() => { window.location.href = getLoginUrl(); }} size="lg" className="w-full shadow-lg hover:shadow-xl transition-all">
@@ -112,6 +109,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 }
 
+const LOGO_DARK = "https://d2xsxph8kpxj0f.cloudfront.net/310519663326243662/JtwK2AToo98P6Ad64BKFob/boox-logo-transparent-dZxnjsPjNpHQaCKCVpKKLE.png";
+const LOGO_LIGHT = "https://d2xsxph8kpxj0f.cloudfront.net/310519663326243662/JtwK2AToo98P6Ad64BKFob/boox-logo-light-XozPqMGGRWnGLP7ieMSWuD.png";
+
 function DashboardLayoutContent({ children, setSidebarWidth }: { children: React.ReactNode; setSidebarWidth: (w: number) => void }) {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
@@ -122,6 +122,8 @@ function DashboardLayoutContent({ children, setSidebarWidth }: { children: React
   const activeMenuItem = menuItems.find((item) => location === item.path || (item.path !== "/" && location.startsWith(item.path)));
   const isMobile = useIsMobile();
   const { activeGroup } = useGroup();
+  const { theme } = useTheme();
+  const logoSrc = theme === "dark" || theme === "retro" ? LOGO_LIGHT : LOGO_DARK;
 
   useEffect(() => { if (isCollapsed) setIsResizing(false); }, [isCollapsed]);
 
@@ -158,7 +160,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: { children: React
               </button>
               {!isCollapsed && (
                 <div className="flex items-center gap-2 min-w-0">
-                  <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663326243662/JtwK2AToo98P6Ad64BKFob/boox-logo-transparent-dZxnjsPjNpHQaCKCVpKKLE.png" alt="boox" className="h-20 shrink-0" />
+                  <img src={logoSrc} alt="boox" className="h-20 shrink-0" />
                 </div>
               )}
             </div>

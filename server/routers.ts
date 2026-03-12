@@ -7,6 +7,7 @@ import { notifyOwner } from "./_core/notification";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import * as db from "./db";
+import { storagePut } from "./storage";
 
 // Helper: verify user is member of group, returns membership
 async function requireGroupMember(userId: number, groupId: number) {
@@ -53,15 +54,27 @@ export const appRouter = router({
         return group;
       }),
     update: protectedProcedure
-      .input(z.object({ groupId: z.number(), name: z.string().min(1).max(256).optional(), description: z.string().max(1000).optional(), isPublic: z.boolean().optional() }))
+      .input(z.object({ groupId: z.number(), name: z.string().min(1).max(256).optional(), description: z.string().max(1000).optional(), isPublic: z.boolean().optional(), coverUrl: z.string().url().optional().nullable() }))
       .mutation(async ({ ctx, input }) => {
         await requireGroupAdmin(ctx.user.id, input.groupId);
-        await db.updateGroup(input.groupId, { name: input.name, description: input.description, isPublic: input.isPublic });
+        await db.updateGroup(input.groupId, { name: input.name, description: input.description, isPublic: input.isPublic, coverUrl: input.coverUrl });
         return { success: true };
       }),
     publicGroups: protectedProcedure
       .query(async ({ ctx }) => {
         return db.getPublicGroups(ctx.user.id);
+      }),
+    uploadCover: protectedProcedure
+      .input(z.object({ groupId: z.number(), imageData: z.string(), mimeType: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        await requireGroupAdmin(ctx.user.id, input.groupId);
+        const buffer = Buffer.from(input.imageData, "base64");
+        const ext = input.mimeType.split("/")[1] || "jpg";
+        const suffix = nanoid(8);
+        const fileKey = `group-covers/${input.groupId}-${suffix}.${ext}`;
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        await db.updateGroup(input.groupId, { coverUrl: url });
+        return { url };
       }),
     joinPublic: protectedProcedure
       .input(z.object({ groupId: z.number() }))
@@ -108,6 +121,19 @@ export const appRouter = router({
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
         await db.createInvitation(token, input.groupId, ctx.user.id, input.email ?? null, input.role, expiresAt);
         return { token, expiresAt };
+      }),
+    bulkCreate: protectedProcedure
+      .input(z.object({ groupId: z.number(), emails: z.array(z.string().email()).min(1).max(50), role: z.enum(["member", "admin"]).default("member") }))
+      .mutation(async ({ ctx, input }) => {
+        await requireGroupAdmin(ctx.user.id, input.groupId);
+        const results: { email: string; token: string; expiresAt: Date }[] = [];
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        for (const email of input.emails) {
+          const token = nanoid(32);
+          await db.createInvitation(token, input.groupId, ctx.user.id, email, input.role, expiresAt);
+          results.push({ email, token, expiresAt });
+        }
+        return results;
       }),
     list: protectedProcedure
       .input(z.object({ groupId: z.number() }))

@@ -20,7 +20,7 @@ export default function InviteAcceptPage() {
 
   const acceptMutation = trpc.invitations.accept.useMutation({
     onSuccess: () => {
-      toast.success("Welcome to the book club!");
+      toast.success("Welcome to the group!");
       setLocation("/");
     },
     onError: (err) => toast.error(err.message),
@@ -70,7 +70,7 @@ export default function InviteAcceptPage() {
             </h2>
             <p className="text-muted-foreground text-sm">
               You&apos;ve been invited to join{" "}
-              <strong>{verification.invitation?.groupName || "a book club"}</strong>.
+              <strong>{verification.invitation?.groupName || "a group"}</strong>.
               Sign in to accept the invitation.
             </p>
             <Button
@@ -96,10 +96,10 @@ export default function InviteAcceptPage() {
             <BookOpen className="h-6 w-6 text-primary" />
           </div>
           <h2 className="text-xl font-serif font-bold">
-            Join {verification.invitation?.groupName || "the Book Club"}
+            Join {verification.invitation?.groupName || "the group"}
           </h2>
           <p className="text-muted-foreground text-sm">
-            You&apos;ve been invited to join {verification.invitation?.groupName || "the book club"}. Click below to
+            You&apos;ve been invited to join {verification.invitation?.groupName || "the group"}. Click below to
             accept.
           </p>
           <Button

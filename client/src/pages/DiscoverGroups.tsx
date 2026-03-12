@@ -77,10 +77,19 @@ export default function DiscoverGroups() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {filteredGroups.map((group) => (
-            <Card key={group.id} className="hover:shadow-md transition-shadow">
-              <CardHeader className="pb-3">
+            <Card key={group.id} className="hover:shadow-md transition-shadow overflow-hidden">
+              {group.coverUrl && (
+                <div className="h-32 w-full overflow-hidden">
+                  <img
+                    src={group.coverUrl}
+                    alt={`${group.name} cover`}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+              <CardHeader className={group.coverUrl ? "pb-3 pt-4" : "pb-3"}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
                     <CardTitle className="text-lg flex items-center gap-2">
