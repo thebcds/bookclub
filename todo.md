@@ -173,3 +173,31 @@
 - [x] Dark/retro mode logo variant — lighter version visible on dark backgrounds
 - [x] Public landing page for non-logged-in visitors
 - [x] All 72 tests passing
+
+## Feature Update (v5.0)
+
+### Email Notifications
+- [x] Notify owner when invites are sent (via notifyOwner)
+- [x] Notify owner when voting opens (via notifyOwner)
+- [x] Send invite notification route for admins
+
+### Group Categories/Tags
+- [x] Add tags JSON column to groups table
+- [x] Predefined genre/interest tags (20 genres)
+- [x] Add tag selection to group creation dialog
+- [x] Add tag editing to group settings page
+- [x] Display tags on group cards in Discover page
+- [x] Add tag filter to Discover page for browsing by category
+
+### Member Profiles
+- [x] Add bio, favoriteGenres, avatarUrl fields to users table
+- [x] Create profile page with stats and editing
+- [x] Avatar upload to S3
+- [x] Show reading stats (groups joined, events participated, reviews written, votes cast)
+- [x] Profile link in sidebar navigation
+
+### Tests
+- [x] Tests for profile CRUD and stats
+- [x] Tests for group tags creation and validation
+- [x] Tests for invite notification routes
+- [x] All 82 tests passing

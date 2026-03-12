@@ -8,7 +8,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useGroup } from "@/contexts/GroupContext";
 import { trpc } from "@/lib/trpc";
 import { Switch } from "@/components/ui/switch";
-import { AlertTriangle, Camera, Crown, Globe, Loader2, Lock, Save, Shield, Trash2, UserMinus, LogOut } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { AlertTriangle, Camera, Crown, Globe, Loader2, Lock, Save, Shield, Trash2, UserMinus, LogOut, X, Tag } from "lucide-react";
+
+const GENRE_TAGS = [
+  "Sci-Fi", "Fantasy", "Mystery", "Romance", "Horror", "Thriller",
+  "Literary Fiction", "Non-Fiction", "Biography", "History",
+  "Philosophy", "Science", "Self-Help", "Poetry", "Classics",
+  "Young Adult", "Graphic Novels", "True Crime", "Humor", "Travel",
+];
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -38,6 +46,7 @@ export default function GroupSettings() {
   const [description, setDescription] = useState("");
   const [isPublic, setIsPublic] = useState(false);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [transferTarget, setTransferTarget] = useState<string>("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
@@ -48,8 +57,18 @@ export default function GroupSettings() {
       setDescription(group.description ?? "");
       setIsPublic(group.isPublic ?? false);
       setCoverPreview(group.coverUrl ?? null);
+      try {
+        const parsed = typeof group.tags === "string" ? JSON.parse(group.tags) : group.tags;
+        setSelectedTags(Array.isArray(parsed) ? parsed : []);
+      } catch { setSelectedTags([]); }
     }
   }, [group]);
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : prev.length < 10 ? [...prev, tag] : prev
+    );
+  };
 
   const uploadCover = trpc.groups.uploadCover.useMutation({
     onSuccess: (data) => {
@@ -215,8 +234,25 @@ export default function GroupSettings() {
                 onCheckedChange={setIsPublic}
               />
             </div>
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2"><Tag className="h-4 w-4" /> Tags</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {GENRE_TAGS.map((tag) => (
+                  <Badge
+                    key={tag}
+                    variant={selectedTags.includes(tag) ? "default" : "outline"}
+                    className="cursor-pointer text-xs transition-colors"
+                    onClick={() => toggleTag(tag)}
+                  >
+                    {tag}
+                    {selectedTags.includes(tag) && <X className="h-3 w-3 ml-1" />}
+                  </Badge>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">Select up to 10 tags to help others discover your group</p>
+            </div>
             <Button
-              onClick={() => updateGroup.mutate({ groupId: activeGroupId, name, description, isPublic })}
+              onClick={() => updateGroup.mutate({ groupId: activeGroupId, name, description, isPublic, tags: selectedTags })}
               disabled={updateGroup.isPending || !name.trim()}
             >
               {updateGroup.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

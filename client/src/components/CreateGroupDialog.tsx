@@ -11,11 +11,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { useGroup } from "@/contexts/GroupContext";
 import { trpc } from "@/lib/trpc";
-import { Globe, Lock, Loader2 } from "lucide-react";
+import { Globe, Lock, Loader2, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+
+const GENRE_TAGS = [
+  "Sci-Fi", "Fantasy", "Mystery", "Romance", "Horror", "Thriller",
+  "Literary Fiction", "Non-Fiction", "Biography", "History",
+  "Philosophy", "Science", "Self-Help", "Poetry", "Classics",
+  "Young Adult", "Graphic Novels", "True Crime", "Humor", "Travel",
+];
 
 export default function CreateGroupDialog({
   open,
@@ -27,7 +35,14 @@ export default function CreateGroupDialog({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isPublic, setIsPublic] = useState(false);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const { setActiveGroupId, refetchGroups } = useGroup();
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : prev.length < 10 ? [...prev, tag] : prev
+    );
+  };
 
   const createGroup = trpc.groups.create.useMutation({
     onSuccess: (data) => {
@@ -37,6 +52,7 @@ export default function CreateGroupDialog({
       setName("");
       setDescription("");
       setIsPublic(false);
+      setSelectedTags([]);
       onOpenChange(false);
     },
     onError: (err) => toast.error(err.message),
@@ -44,7 +60,7 @@ export default function CreateGroupDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-serif">Create a Group</DialogTitle>
           <DialogDescription>
@@ -73,6 +89,22 @@ export default function CreateGroupDialog({
               maxLength={1000}
               rows={3}
             />
+          </div>
+          <div className="space-y-2">
+            <Label>Tags (optional, up to 10)</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {GENRE_TAGS.map((tag) => (
+                <Badge
+                  key={tag}
+                  variant={selectedTags.includes(tag) ? "default" : "outline"}
+                  className="cursor-pointer text-xs transition-colors"
+                  onClick={() => toggleTag(tag)}
+                >
+                  {tag}
+                  {selectedTags.includes(tag) && <X className="h-3 w-3 ml-1" />}
+                </Badge>
+              ))}
+            </div>
           </div>
           <div className="flex items-center justify-between rounded-lg border p-3">
             <div className="flex items-center gap-3">
@@ -109,6 +141,7 @@ export default function CreateGroupDialog({
                 name: name.trim(),
                 description: description.trim() || undefined,
                 isPublic,
+                tags: selectedTags,
               })
             }
             disabled={!name.trim() || createGroup.isPending}

@@ -211,6 +211,12 @@ vi.mock("./db", () => {
     deleteGroup: vi.fn().mockResolvedValue(undefined),
     removeGroupMember: vi.fn().mockResolvedValue(undefined),
     transferGroupOwnership: vi.fn().mockResolvedValue(undefined),
+    // Profile functions
+    updateUserProfile: vi.fn().mockResolvedValue(undefined),
+    getUserProfile: vi.fn().mockImplementation(async (userId: number) => {
+      return { id: userId, name: "Test User", email: "test@example.com", bio: null, favoriteGenres: "[]", avatarUrl: null, createdAt: new Date() };
+    }),
+    getUserStats: vi.fn().mockResolvedValue({ groupsJoined: 1, eventsParticipated: 0, reviewsWritten: 0, votesCast: 0 }),
   };
 });
 
@@ -924,6 +930,99 @@ describe("group cover image", () => {
       memberCaller.groups.update({
         groupId: 1,
         coverUrl: "https://example.com/cover.jpg",
+      })
+    ).rejects.toThrow();
+  });
+});
+
+
+// ─── Profile Tests ──────────────────────────────────────────────────
+describe("profile", () => {
+  it("gets own profile", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const profile = await caller.profile.me();
+    expect(profile).toBeDefined();
+    expect(profile?.email).toBe("test@example.com");
+  });
+
+  it("gets profile by id", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const profile = await caller.profile.getById({ userId: 1 });
+    expect(profile).toBeDefined();
+  });
+
+  it("updates profile bio and genres", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.profile.update({
+      bio: "I love reading sci-fi and fantasy books",
+      favoriteGenres: ["Sci-Fi", "Fantasy"],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects bio over 500 chars", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    await expect(
+      caller.profile.update({ bio: "x".repeat(501) })
+    ).rejects.toThrow();
+  });
+
+  it("gets user stats", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const stats = await caller.profile.stats({ userId: 1 });
+    expect(stats).toHaveProperty("groupsJoined");
+    expect(stats).toHaveProperty("eventsParticipated");
+    expect(stats).toHaveProperty("reviewsWritten");
+    expect(stats).toHaveProperty("votesCast");
+  });
+
+  it("rejects unauthenticated profile access", async () => {
+    const caller = appRouter.createCaller(createCtx(null));
+    await expect(caller.profile.me()).rejects.toThrow();
+  });
+});
+
+// ─── Group Tags Tests ───────────────────────────────────────────────
+describe("group tags", () => {
+  it("creates group with tags", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.groups.create({
+      name: "Tagged Group",
+      tags: ["Sci-Fi", "Fantasy"],
+    });
+    expect(result.id).toBeDefined();
+  });
+
+  it("rejects more than 10 tags", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    await expect(
+      caller.groups.create({
+        name: "Too Many Tags",
+        tags: Array.from({ length: 11 }, (_, i) => `tag-${i}`),
+      })
+    ).rejects.toThrow();
+  });
+});
+
+// ─── Invite Notification Tests ──────────────────────────────────────
+describe("invite notifications", () => {
+  it("sends invite notification as admin", async () => {
+    const caller = appRouter.createCaller(createCtx(createAdminUser()));
+    const result = await caller.notifications.sendInviteNotification({
+      groupId: 1,
+      email: "friend@example.com",
+      inviteLink: "https://boox.manus.space/invite/abc123",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects non-admin sending invite notification", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    await expect(
+      caller.notifications.sendInviteNotification({
+        groupId: 1,
+        email: "friend@example.com",
+        inviteLink: "https://boox.manus.space/invite/abc123",
       })
     ).rejects.toThrow();
   });

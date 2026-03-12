@@ -37,9 +37,10 @@ export const appRouter = router({
   // ─── Groups ────────────────────────────────────────────────────
   groups: router({
     create: protectedProcedure
-      .input(z.object({ name: z.string().min(1).max(256), description: z.string().max(1000).optional(), isPublic: z.boolean().default(false) }))
+      .input(z.object({ name: z.string().min(1).max(256), description: z.string().max(1000).optional(), isPublic: z.boolean().default(false), tags: z.array(z.string()).max(10).default([]) }))
       .mutation(async ({ ctx, input }) => {
         const id = await db.createGroup({ name: input.name, description: input.description, isPublic: input.isPublic, createdBy: ctx.user.id });
+        if (input.tags.length > 0) await db.updateGroup(id, { tags: input.tags });
         return { id };
       }),
     myGroups: protectedProcedure.query(async ({ ctx }) => {
@@ -54,10 +55,10 @@ export const appRouter = router({
         return group;
       }),
     update: protectedProcedure
-      .input(z.object({ groupId: z.number(), name: z.string().min(1).max(256).optional(), description: z.string().max(1000).optional(), isPublic: z.boolean().optional(), coverUrl: z.string().url().optional().nullable() }))
+      .input(z.object({ groupId: z.number(), name: z.string().min(1).max(256).optional(), description: z.string().max(1000).optional(), isPublic: z.boolean().optional(), coverUrl: z.string().url().optional().nullable(), tags: z.array(z.string()).max(10).optional() }))
       .mutation(async ({ ctx, input }) => {
         await requireGroupAdmin(ctx.user.id, input.groupId);
-        await db.updateGroup(input.groupId, { name: input.name, description: input.description, isPublic: input.isPublic, coverUrl: input.coverUrl });
+        await db.updateGroup(input.groupId, { name: input.name, description: input.description, isPublic: input.isPublic, coverUrl: input.coverUrl, tags: input.tags });
         return { success: true };
       }),
     publicGroups: protectedProcedure
@@ -260,6 +261,18 @@ export const appRouter = router({
       .input(z.object({ senderName: z.string(), preview: z.string() }))
       .mutation(async ({ input }) => {
         await notifyOwner({ title: `New Chat Message from ${input.senderName}`, content: input.preview.slice(0, 200) });
+        return { success: true };
+      }),
+    sendInviteNotification: protectedProcedure
+      .input(z.object({ groupId: z.number(), email: z.string(), inviteLink: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        await requireGroupAdmin(ctx.user.id, input.groupId);
+        const group = await db.getGroupById(input.groupId);
+        const groupName = group?.name ?? "a book club";
+        await notifyOwner({
+          title: `New Invite: ${input.email} invited to ${groupName}`,
+          content: `${ctx.user.name ?? "An admin"} invited ${input.email} to join "${groupName}".\n\nInvite link: ${input.inviteLink}`,
+        });
         return { success: true };
       }),
   }),
@@ -774,6 +787,42 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+
+  // ─── Profile ─────────────────────────────────────────────────────
+  profile: router({
+    me: protectedProcedure.query(async ({ ctx }) => {
+      return db.getUserProfile(ctx.user.id);
+    }),
+    getById: protectedProcedure
+      .input(z.object({ userId: z.number() }))
+      .query(async ({ input }) => {
+        return db.getUserProfile(input.userId);
+      }),
+    update: protectedProcedure
+      .input(z.object({ bio: z.string().max(500).optional(), favoriteGenres: z.array(z.string()).max(20).optional() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.updateUserProfile(ctx.user.id, { bio: input.bio, favoriteGenres: input.favoriteGenres });
+        return { success: true };
+      }),
+    uploadAvatar: protectedProcedure
+      .input(z.object({ imageData: z.string(), mimeType: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const buffer = Buffer.from(input.imageData, "base64");
+        const ext = input.mimeType.split("/")[1] || "jpg";
+        const suffix = nanoid(8);
+        const fileKey = `avatars/${ctx.user.id}-${suffix}.${ext}`;
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        await db.updateUserProfile(ctx.user.id, { avatarUrl: url });
+        return { url };
+      }),
+    stats: protectedProcedure
+      .input(z.object({ userId: z.number() }))
+      .query(async ({ input }) => {
+        return db.getUserStats(input.userId);
+      }),
+  }),
+
+
 });
 
 // ─── Tournament Bracket Generation ──────────────────────────────────

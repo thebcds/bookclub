@@ -35,6 +35,7 @@ import {
   Settings,
   Sun,
   Trophy,
+  User,
   Users,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
@@ -56,6 +57,7 @@ const menuItems = [
   { icon: Users, label: "Members", path: "/members", requiresGroup: true },
   { icon: Settings, label: "Settings", path: "/settings", requiresGroup: true },
   { icon: Globe, label: "Discover", path: "/discover", requiresGroup: false },
+  { icon: User, label: "Profile", path: "/profile", requiresGroup: false },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
