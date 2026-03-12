@@ -160,3 +160,6 @@
 ## Logo Update (v3.10)
 - [x] Regenerate boox logo with transparent background
 - [x] Enlarge logo in sidebar
+
+## Logo Size (v3.11)
+- [x] Double the logo size in sidebar (h-10 → h-20)

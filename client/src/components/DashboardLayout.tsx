@@ -158,7 +158,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: { children: React
               </button>
               {!isCollapsed && (
                 <div className="flex items-center gap-2 min-w-0">
-                  <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663326243662/JtwK2AToo98P6Ad64BKFob/boox-logo-transparent-dZxnjsPjNpHQaCKCVpKKLE.png" alt="boox" className="h-10 shrink-0" />
+                  <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663326243662/JtwK2AToo98P6Ad64BKFob/boox-logo-transparent-dZxnjsPjNpHQaCKCVpKKLE.png" alt="boox" className="h-20 shrink-0" />
                 </div>
               )}
             </div>
