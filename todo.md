@@ -137,3 +137,6 @@
 - [x] Add backend route to join a public group directly (no invite needed)
 - [x] Add navigation link to discover/browse public groups
 - [x] Write tests for public group listing and joining (58 total passing)
+
+## Invite Link Visibility Fix (v3.6)
+- [x] Add copy link button to each pending invitation in Members page

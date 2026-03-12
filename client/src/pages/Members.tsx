@@ -128,26 +128,47 @@ export default function MembersPage() {
           <CardContent>
             <div className="space-y-2">
               {invitations.map((inv) => (
-                <div
-                  key={inv.id}
-                  className="flex items-center justify-between p-3 rounded-lg border"
-                >
-                  <div>
-                    <p className="text-sm font-medium">
-                      {inv.email || "Link invitation"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Expires{" "}
-                      {new Date(inv.expiresAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <Badge variant="outline">Pending</Badge>
-                </div>
+                <InvitationRow key={inv.id} invitation={inv} />
               ))}
             </div>
           </CardContent>
         </Card>
       )}
+    </div>
+  );
+}
+
+function InvitationRow({ invitation }: { invitation: { id: number; token: string; email: string | null; expiresAt: Date } }) {
+  const [copied, setCopied] = useState(false);
+  const inviteLink = `${window.location.origin}/invite/${invitation.token}`;
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(inviteLink);
+    setCopied(true);
+    toast.success("Invite link copied!");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="flex items-center justify-between p-3 rounded-lg border gap-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">
+          {invitation.email || "Link invitation"}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Expires {new Date(invitation.expiresAt).toLocaleDateString()}
+        </p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <Button variant="outline" size="sm" onClick={copyLink} className="gap-1.5">
+          {copied ? (
+            <><Check className="h-3.5 w-3.5 text-emerald-600" /> Copied</>
+          ) : (
+            <><Copy className="h-3.5 w-3.5" /> Copy Link</>
+          )}
+        </Button>
+        <Badge variant="outline">Pending</Badge>
+      </div>
     </div>
   );
 }
