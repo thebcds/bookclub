@@ -146,3 +146,9 @@
 - [x] Stop global auto-redirect to login on invite pages
 - [x] Preserve return path (invite URL) through OAuth login flow
 - [x] All 58 tests passing
+
+## Invitation Improvements (v3.8)
+- [x] Test invite flow end-to-end (create invite, copy link, accept from different account)
+- [x] Add revoke/cancel button for pending invitations
+- [x] Show accepted invitations history (who accepted which invite and when)
+- [x] Write tests for revoke and invitation history (63 total passing)

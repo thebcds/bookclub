@@ -21,7 +21,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useGroup } from "@/contexts/GroupContext";
 import { trpc } from "@/lib/trpc";
-import { Check, Copy, Loader2, Plus, Shield, Users } from "lucide-react";
+import { Check, CheckCircle2, Copy, History, Loader2, Plus, Shield, Trash2, Users, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -33,6 +33,10 @@ export default function MembersPage() {
     { enabled: !!activeGroup }
   );
   const { data: invitations } = trpc.invitations.list.useQuery(
+    { groupId: gid },
+    { enabled: !!activeGroup && isGroupAdmin }
+  );
+  const { data: invitationHistory } = trpc.invitations.history.useQuery(
     { groupId: gid },
     { enabled: !!activeGroup && isGroupAdmin }
   );
@@ -128,7 +132,49 @@ export default function MembersPage() {
           <CardContent>
             <div className="space-y-2">
               {invitations.map((inv) => (
-                <InvitationRow key={inv.id} invitation={inv} />
+                <InvitationRow key={inv.id} invitation={inv} groupId={gid} />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Accepted Invitation History */}
+      {isGroupAdmin && invitationHistory && invitationHistory.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <History className="h-4 w-4" />
+              Invitation History
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {invitationHistory.map((inv) => (
+                <div
+                  key={inv.id}
+                  className="flex items-center justify-between p-3 rounded-lg border gap-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">
+                        {inv.email || "Link invitation"}
+                      </p>
+                      <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50 gap-1">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Accepted
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Invited by {inv.invitedByName ?? "Unknown"}
+                      {inv.acceptedByName && <> &middot; Accepted by <strong>{inv.acceptedByName}</strong></>}
+                      {" "}&middot; {new Date(inv.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <Badge variant="secondary" className="shrink-0 capitalize">
+                    {inv.role}
+                  </Badge>
+                </div>
               ))}
             </div>
           </CardContent>
@@ -138,9 +184,18 @@ export default function MembersPage() {
   );
 }
 
-function InvitationRow({ invitation }: { invitation: { id: number; token: string; email: string | null; expiresAt: Date } }) {
+function InvitationRow({ invitation, groupId }: { invitation: { id: number; token: string; email: string | null; expiresAt: Date }; groupId: number }) {
   const [copied, setCopied] = useState(false);
   const inviteLink = `${window.location.origin}/invite/${invitation.token}`;
+  const utils = trpc.useUtils();
+
+  const revokeMutation = trpc.invitations.revoke.useMutation({
+    onSuccess: () => {
+      toast.success("Invitation revoked");
+      utils.invitations.list.invalidate({ groupId });
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   const copyLink = () => {
     navigator.clipboard.writeText(inviteLink);
@@ -165,6 +220,19 @@ function InvitationRow({ invitation }: { invitation: { id: number; token: string
             <><Check className="h-3.5 w-3.5 text-emerald-600" /> Copied</>
           ) : (
             <><Copy className="h-3.5 w-3.5" /> Copy Link</>
+          )}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => revokeMutation.mutate({ groupId, invitationId: invitation.id })}
+          disabled={revokeMutation.isPending}
+          className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
+        >
+          {revokeMutation.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <><X className="h-3.5 w-3.5" /> Revoke</>
           )}
         </Button>
         <Badge variant="outline">Pending</Badge>

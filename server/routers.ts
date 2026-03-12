@@ -133,6 +133,19 @@ export const appRouter = router({
         await db.acceptInvitation(input.token, ctx.user.id);
         return { success: true, groupId: inv.groupId };
       }),
+    revoke: protectedProcedure
+      .input(z.object({ groupId: z.number(), invitationId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await requireGroupAdmin(ctx.user.id, input.groupId);
+        await db.revokeInvitation(input.invitationId, input.groupId);
+        return { success: true };
+      }),
+    history: protectedProcedure
+      .input(z.object({ groupId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        await requireGroupAdmin(ctx.user.id, input.groupId);
+        return db.getInvitationHistory(input.groupId);
+      }),
   }),
 
   // ─── Books (group-scoped) ─────────────────────────────────────

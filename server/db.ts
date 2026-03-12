@@ -205,6 +205,32 @@ export async function acceptInvitation(token: string, userId: number) {
   await addGroupMember(inv.groupId, userId, inv.role);
 }
 
+export async function revokeInvitation(invitationId: number, groupId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(invitations).where(and(eq(invitations.id, invitationId), eq(invitations.groupId, groupId), eq(invitations.status, "pending")));
+}
+
+export async function getInvitationHistory(groupId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: invitations.id,
+      email: invitations.email,
+      role: invitations.role,
+      status: invitations.status,
+      createdAt: invitations.createdAt,
+      expiresAt: invitations.expiresAt,
+      invitedByName: users.name,
+      acceptedByName: sql<string | null>`(SELECT u2.name FROM users u2 WHERE u2.id = ${invitations.acceptedBy})`,
+    })
+    .from(invitations)
+    .leftJoin(users, eq(invitations.invitedBy, users.id))
+    .where(and(eq(invitations.groupId, groupId), eq(invitations.status, "accepted")))
+    .orderBy(desc(invitations.createdAt));
+}
+
 // ─── Books (group-scoped) ───────────────────────────────────────────
 export async function createBook(data: { groupId: number; title: string; author: string; genre?: string; pageCount?: number; coverUrl?: string; rating?: number; isbn?: string; description?: string }) {
   const db = await getDb();
