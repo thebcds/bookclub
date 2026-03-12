@@ -1,0 +1,1 @@
+ALTER TABLE `groups` ADD `isPublic` boolean DEFAULT false NOT NULL;

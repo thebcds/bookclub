@@ -36,9 +36,9 @@ export const appRouter = router({
   // ─── Groups ────────────────────────────────────────────────────
   groups: router({
     create: protectedProcedure
-      .input(z.object({ name: z.string().min(1).max(256), description: z.string().max(1000).optional() }))
+      .input(z.object({ name: z.string().min(1).max(256), description: z.string().max(1000).optional(), isPublic: z.boolean().default(false) }))
       .mutation(async ({ ctx, input }) => {
-        const id = await db.createGroup({ name: input.name, description: input.description, createdBy: ctx.user.id });
+        const id = await db.createGroup({ name: input.name, description: input.description, isPublic: input.isPublic, createdBy: ctx.user.id });
         return { id };
       }),
     myGroups: protectedProcedure.query(async ({ ctx }) => {
@@ -53,10 +53,25 @@ export const appRouter = router({
         return group;
       }),
     update: protectedProcedure
-      .input(z.object({ groupId: z.number(), name: z.string().min(1).max(256).optional(), description: z.string().max(1000).optional() }))
+      .input(z.object({ groupId: z.number(), name: z.string().min(1).max(256).optional(), description: z.string().max(1000).optional(), isPublic: z.boolean().optional() }))
       .mutation(async ({ ctx, input }) => {
         await requireGroupAdmin(ctx.user.id, input.groupId);
-        await db.updateGroup(input.groupId, { name: input.name, description: input.description });
+        await db.updateGroup(input.groupId, { name: input.name, description: input.description, isPublic: input.isPublic });
+        return { success: true };
+      }),
+    publicGroups: protectedProcedure
+      .query(async ({ ctx }) => {
+        return db.getPublicGroups(ctx.user.id);
+      }),
+    joinPublic: protectedProcedure
+      .input(z.object({ groupId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const group = await db.getGroupById(input.groupId);
+        if (!group) throw new TRPCError({ code: "NOT_FOUND", message: "Group not found" });
+        if (!group.isPublic) throw new TRPCError({ code: "FORBIDDEN", message: "This group is private. You need an invitation to join." });
+        const existing = await db.getGroupMembership(input.groupId, ctx.user.id);
+        if (existing) throw new TRPCError({ code: "BAD_REQUEST", message: "You are already a member of this group" });
+        await db.addGroupMember(input.groupId, ctx.user.id, "member");
         return { success: true };
       }),
   }),

@@ -9,10 +9,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useGroup } from "@/contexts/GroupContext";
 import { trpc } from "@/lib/trpc";
-import { Loader2 } from "lucide-react";
+import { Globe, Lock, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -25,6 +26,7 @@ export default function CreateGroupDialog({
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [isPublic, setIsPublic] = useState(false);
   const { setActiveGroupId, refetchGroups } = useGroup();
 
   const createGroup = trpc.groups.create.useMutation({
@@ -34,6 +36,7 @@ export default function CreateGroupDialog({
       setActiveGroupId(data.id);
       setName("");
       setDescription("");
+      setIsPublic(false);
       onOpenChange(false);
     },
     onError: (err) => toast.error(err.message),
@@ -71,6 +74,30 @@ export default function CreateGroupDialog({
               rows={3}
             />
           </div>
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="flex items-center gap-3">
+              {isPublic ? (
+                <Globe className="h-5 w-5 text-primary" />
+              ) : (
+                <Lock className="h-5 w-5 text-muted-foreground" />
+              )}
+              <div>
+                <Label htmlFor="group-public" className="text-sm font-medium cursor-pointer">
+                  {isPublic ? "Public Group" : "Private Group"}
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {isPublic
+                    ? "Anyone can find and join this group"
+                    : "Only invited members can join"}
+                </p>
+              </div>
+            </div>
+            <Switch
+              id="group-public"
+              checked={isPublic}
+              onCheckedChange={setIsPublic}
+            />
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -81,6 +108,7 @@ export default function CreateGroupDialog({
               createGroup.mutate({
                 name: name.trim(),
                 description: description.trim() || undefined,
+                isPublic,
               })
             }
             disabled={!name.trim() || createGroup.isPending}

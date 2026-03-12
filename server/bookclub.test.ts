@@ -184,6 +184,19 @@ vi.mock("./db", () => {
     createBookReview: vi.fn().mockImplementation(async () => nextId++),
     getBookReviews: vi.fn().mockResolvedValue([]),
     getBookAverageRating: vi.fn().mockResolvedValue(null),
+    // Public groups
+    getPublicGroups: vi.fn().mockImplementation(async (excludeUserId?: number) => {
+      const publicGroups = groups.filter((g: any) => g.isPublic);
+      if (excludeUserId) {
+        const memberGroupIds = new Set(groupMembers.filter((gm: any) => gm.userId === excludeUserId).map((gm: any) => gm.groupId));
+        return publicGroups.filter((g: any) => !memberGroupIds.has(g.id)).map((g: any) => ({ ...g, memberCount: groupMembers.filter((gm: any) => gm.groupId === g.id).length }));
+      }
+      return publicGroups.map((g: any) => ({ ...g, memberCount: groupMembers.filter((gm: any) => gm.groupId === g.id).length }));
+    }),
+    getUserSubmissionsForEvent: vi.fn().mockImplementation(async (eventId: number, userId: number) => {
+      return submissions.filter((s: any) => s.eventId === eventId && s.submittedBy === userId);
+    }),
+    updateEvent: vi.fn().mockResolvedValue(undefined),
     // Group settings functions
     deleteGroup: vi.fn().mockResolvedValue(undefined),
     removeGroupMember: vi.fn().mockResolvedValue(undefined),
@@ -683,6 +696,73 @@ describe("notifications", () => {
     const result = await caller.notifications.notifyNewChat({
       senderName: "Test User",
       preview: "Check out this book!",
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+// ─── Public/Private Group Tests ────────────────────────────────────
+describe("public groups", () => {
+  it("creates a public group", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.groups.create({
+      name: "Public Readers",
+      description: "Open to everyone",
+      isPublic: true,
+    });
+    expect(result.id).toBeDefined();
+    expect(typeof result.id).toBe("number");
+  });
+
+  it("creates a private group by default", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.groups.create({
+      name: "Secret Club",
+    });
+    expect(result.id).toBeDefined();
+  });
+
+  it("lists public groups", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const publicGroups = await caller.groups.publicGroups();
+    expect(Array.isArray(publicGroups)).toBe(true);
+  });
+
+  it("can join a public group", async () => {
+    // First create a public group as admin
+    const adminCaller = appRouter.createCaller(createCtx(createAdminUser()));
+    const group = await adminCaller.groups.create({
+      name: "Open Book Club",
+      description: "Join us!",
+      isPublic: true,
+    });
+
+    // A different user joins the public group
+    const user2 = createMockUser({ id: 50, openId: "user-50", name: "User 50" });
+    const user2Caller = appRouter.createCaller(createCtx(user2));
+    const result = await user2Caller.groups.joinPublic({ groupId: group.id });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects joining a private group directly", async () => {
+    // Group 1 is private (default)
+    const user2 = createMockUser({ id: 55, openId: "user-55", name: "User 55" });
+    const user2Caller = appRouter.createCaller(createCtx(user2));
+    await expect(
+      user2Caller.groups.joinPublic({ groupId: 1 })
+    ).rejects.toThrow("private");
+  });
+
+  it("rejects unauthenticated public group listing", async () => {
+    const caller = appRouter.createCaller(createCtx(null));
+    await expect(caller.groups.publicGroups()).rejects.toThrow();
+  });
+
+  it("admin can update group visibility", async () => {
+    const caller = appRouter.createCaller(createCtx(createAdminUser()));
+    const result = await caller.groups.update({
+      groupId: 1,
+      isPublic: true,
     });
     expect(result.success).toBe(true);
   });

@@ -7,7 +7,8 @@ import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useGroup } from "@/contexts/GroupContext";
 import { trpc } from "@/lib/trpc";
-import { AlertTriangle, Crown, Loader2, Save, Shield, Trash2, UserMinus, LogOut } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { AlertTriangle, Crown, Globe, Loader2, Lock, Save, Shield, Trash2, UserMinus, LogOut } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -35,6 +36,7 @@ export default function GroupSettings() {
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [isPublic, setIsPublic] = useState(false);
   const [transferTarget, setTransferTarget] = useState<string>("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
@@ -43,6 +45,7 @@ export default function GroupSettings() {
     if (group) {
       setName(group.name);
       setDescription(group.description ?? "");
+      setIsPublic(group.isPublic ?? false);
     }
   }, [group]);
 
@@ -140,8 +143,32 @@ export default function GroupSettings() {
               <Label htmlFor="desc">Description</Label>
               <Input id="desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="A brief description of your group" />
             </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="flex items-center gap-3">
+                {isPublic ? (
+                  <Globe className="h-5 w-5 text-primary" />
+                ) : (
+                  <Lock className="h-5 w-5 text-muted-foreground" />
+                )}
+                <div>
+                  <Label htmlFor="group-public-setting" className="text-sm font-medium cursor-pointer">
+                    {isPublic ? "Public Group" : "Private Group"}
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {isPublic
+                      ? "Anyone can find and join this group from the Discover page"
+                      : "Only invited members can join this group"}
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="group-public-setting"
+                checked={isPublic}
+                onCheckedChange={setIsPublic}
+              />
+            </div>
             <Button
-              onClick={() => updateGroup.mutate({ groupId: activeGroupId, name, description })}
+              onClick={() => updateGroup.mutate({ groupId: activeGroupId, name, description, isPublic })}
               disabled={updateGroup.isPending || !name.trim()}
             >
               {updateGroup.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

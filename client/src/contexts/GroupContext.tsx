@@ -5,6 +5,7 @@ type Group = {
   id: number;
   name: string;
   description: string | null;
+  isPublic: boolean;
   createdBy: number;
   createdAt: Date;
   role: "admin" | "member";

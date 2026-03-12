@@ -43,6 +43,13 @@
       "when": 1773258117879,
       "tag": "0005_stormy_ares",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1773344760139,
+      "tag": "0006_stormy_silk_fever",
+      "breakpoints": true
     }
   ]
 }

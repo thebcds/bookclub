@@ -127,3 +127,13 @@
 - [x] Add retro display theme mode (amber CRT aesthetic with scanlines, monospace font, phosphor glow)
 - [x] Update theme toggle to 3-mode segmented control (Light, Dark, Retro) in sidebar footer
 - [x] All 51 tests passing
+
+## Public/Private Group Visibility (v3.5)
+- [x] Add isPublic column to groups table (default false/private)
+- [x] Add public/private toggle to group creation dialog
+- [x] Add public/private toggle to group settings page
+- [x] Create "Discover Groups" / "Browse Public Groups" page
+- [x] Add backend route to list public groups
+- [x] Add backend route to join a public group directly (no invite needed)
+- [x] Add navigation link to discover/browse public groups
+- [x] Write tests for public group listing and joining (58 total passing)

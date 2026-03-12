@@ -25,6 +25,7 @@ import { useIsMobile } from "@/hooks/useMobile";
 import {
   BookOpen,
   Calendar,
+  Globe,
   LayoutDashboard,
   LogOut,
   MessageCircle,
@@ -47,13 +48,14 @@ import { Separator } from "./ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: Trophy, label: "Events", path: "/events" },
-  { icon: BookOpen, label: "Books", path: "/books" },
-  { icon: Calendar, label: "Calendar", path: "/calendar" },
-  { icon: MessageCircle, label: "Chat", path: "/chat" },
-  { icon: Users, label: "Members", path: "/members" },
-  { icon: Settings, label: "Settings", path: "/settings" },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/", requiresGroup: true },
+  { icon: Trophy, label: "Events", path: "/events", requiresGroup: true },
+  { icon: BookOpen, label: "Books", path: "/books", requiresGroup: true },
+  { icon: Calendar, label: "Calendar", path: "/calendar", requiresGroup: true },
+  { icon: MessageCircle, label: "Chat", path: "/chat", requiresGroup: true },
+  { icon: Users, label: "Members", path: "/members", requiresGroup: true },
+  { icon: Settings, label: "Settings", path: "/settings", requiresGroup: true },
+  { icon: Globe, label: "Discover", path: "/discover", requiresGroup: false },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -178,7 +180,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: { children: React
                       onClick={() => setLocation(item.path)}
                       tooltip={item.label}
                       className="h-10 transition-all font-normal"
-                      disabled={!activeGroup}
+                      disabled={item.requiresGroup && !activeGroup}
                     >
                       <item.icon className={`h-4 w-4 ${isActive ? "text-primary" : ""}`} />
                       <span>{item.label}</span>

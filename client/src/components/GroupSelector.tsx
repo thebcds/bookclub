@@ -7,7 +7,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronDown, Plus, Users } from "lucide-react";
+import { ChevronDown, Globe, Lock, Plus, Users } from "lucide-react";
 
 export default function GroupSelector({ collapsed }: { collapsed?: boolean }) {
   const { groups, activeGroup, setActiveGroupId } = useGroup();
@@ -28,6 +28,11 @@ export default function GroupSelector({ collapsed }: { collapsed?: boolean }) {
               className={g.id === activeGroup?.id ? "bg-accent" : ""}
             >
               <span className="truncate">{g.name}</span>
+              {g.isPublic ? (
+                <Globe className="h-3 w-3 text-muted-foreground ml-auto shrink-0" />
+              ) : (
+                <Lock className="h-3 w-3 text-muted-foreground ml-auto shrink-0" />
+              )}
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>
@@ -50,8 +55,14 @@ export default function GroupSelector({ collapsed }: { collapsed?: boolean }) {
               <p className="text-sm font-medium truncate leading-tight">
                 {activeGroup?.name ?? "Select Group"}
               </p>
-              <p className="text-[10px] text-muted-foreground truncate">
+              <p className="text-[10px] text-muted-foreground truncate flex items-center gap-1">
                 {activeGroup?.role === "admin" ? "Admin" : "Member"}
+                {activeGroup && (
+                  <>
+                    <span className="mx-0.5">·</span>
+                    {activeGroup.isPublic ? "Public" : "Private"}
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -69,12 +80,17 @@ export default function GroupSelector({ collapsed }: { collapsed?: boolean }) {
               <div className="h-6 w-6 rounded bg-primary/10 flex items-center justify-center shrink-0">
                 <Users className="h-3 w-3 text-primary" />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm truncate">{g.name}</p>
                 <p className="text-[10px] text-muted-foreground">
                   {g.role === "admin" ? "Admin" : "Member"}
                 </p>
               </div>
+              {g.isPublic ? (
+                <Globe className="h-3 w-3 text-muted-foreground shrink-0" />
+              ) : (
+                <Lock className="h-3 w-3 text-muted-foreground shrink-0" />
+              )}
             </div>
           </DropdownMenuItem>
         ))}

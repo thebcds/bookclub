@@ -67,10 +67,10 @@ export async function getUserByOpenId(openId: string) {
 }
 
 // ─── Groups ─────────────────────────────────────────────────────────
-export async function createGroup(data: { name: string; description?: string; createdBy: number }) {
+export async function createGroup(data: { name: string; description?: string; isPublic?: boolean; createdBy: number }) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  const result = await db.insert(groups).values(data);
+  const result = await db.insert(groups).values({ ...data, isPublic: data.isPublic ?? false });
   const groupId = result[0].insertId;
   // Creator is automatically an admin member
   await db.insert(groupMembers).values({ groupId, userId: data.createdBy, role: "admin" });
@@ -88,7 +88,7 @@ export async function getUserGroups(userId: number) {
   const db = await getDb();
   if (!db) return [];
   return db
-    .select({ id: groups.id, name: groups.name, description: groups.description, createdBy: groups.createdBy, createdAt: groups.createdAt, role: groupMembers.role })
+    .select({ id: groups.id, name: groups.name, description: groups.description, isPublic: groups.isPublic, createdBy: groups.createdBy, createdAt: groups.createdAt, role: groupMembers.role })
     .from(groupMembers)
     .innerJoin(groups, eq(groupMembers.groupId, groups.id))
     .where(eq(groupMembers.userId, userId));
@@ -130,10 +130,45 @@ export async function addGroupMember(groupId: number, userId: number, role: "adm
   return result[0].insertId;
 }
 
-export async function updateGroup(id: number, data: { name?: string; description?: string }) {
+export async function updateGroup(id: number, data: { name?: string; description?: string; isPublic?: boolean }) {
   const db = await getDb();
   if (!db) return;
-  await db.update(groups).set(data).where(eq(groups.id, id));
+  const updateData: Record<string, unknown> = {};
+  if (data.name !== undefined) updateData.name = data.name;
+  if (data.description !== undefined) updateData.description = data.description;
+  if (data.isPublic !== undefined) updateData.isPublic = data.isPublic;
+  if (Object.keys(updateData).length > 0) {
+    await db.update(groups).set(updateData).where(eq(groups.id, id));
+  }
+}
+
+export async function getPublicGroups(excludeUserId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const publicGroupsList = await db
+    .select({
+      id: groups.id,
+      name: groups.name,
+      description: groups.description,
+      isPublic: groups.isPublic,
+      createdBy: groups.createdBy,
+      createdAt: groups.createdAt,
+      memberCount: sql<number>`(SELECT COUNT(*) FROM ${groupMembers} WHERE ${groupMembers.groupId} = ${groups.id})`,
+    })
+    .from(groups)
+    .where(eq(groups.isPublic, true))
+    .orderBy(desc(groups.createdAt));
+  
+  // If excludeUserId provided, filter out groups user is already a member of
+  if (excludeUserId) {
+    const userMemberships = await db
+      .select({ groupId: groupMembers.groupId })
+      .from(groupMembers)
+      .where(eq(groupMembers.userId, excludeUserId));
+    const memberGroupIds = new Set(userMemberships.map(m => m.groupId));
+    return publicGroupsList.filter(g => !memberGroupIds.has(g.id));
+  }
+  return publicGroupsList;
 }
 
 // ─── Invitations (group-scoped) ─────────────────────────────────────
