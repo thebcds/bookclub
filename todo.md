@@ -156,3 +156,7 @@
 ## Logo (v3.9)
 - [x] Generate boox logo with book club theme
 - [x] Set as app logo in sidebar
+
+## Logo Update (v3.10)
+- [x] Regenerate boox logo with transparent background
+- [x] Enlarge logo in sidebar
