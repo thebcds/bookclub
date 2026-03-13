@@ -25,6 +25,7 @@ import {
   BookOpen,
   Check,
   Crown,
+  EyeOff,
   Loader2,
   MoreHorizontal,
   Pencil,
@@ -187,6 +188,18 @@ export default function EventDetailPage() {
               <Badge variant="outline" className="border-amber-400 text-amber-700 gap-1">
                 <Crown className="h-3 w-3" />
                 Admin Curated
+              </Badge>
+            )}
+            {event.anonymousVoting && (
+              <Badge variant="outline" className="border-blue-400 text-blue-700 gap-1">
+                <EyeOff className="h-3 w-3" />
+                Anonymous Votes
+              </Badge>
+            )}
+            {event.hideTalliesUntilComplete && (
+              <Badge variant="outline" className="border-purple-400 text-purple-700 gap-1">
+                <EyeOff className="h-3 w-3" />
+                Hidden Tallies
               </Badge>
             )}
           </div>
@@ -408,6 +421,8 @@ export default function EventDetailPage() {
               brackets={bracketData ?? []}
               eventStatus={event.status}
               isAdmin={isGroupAdmin}
+              anonymousVoting={event.anonymousVoting}
+              hideTalliesUntilComplete={event.hideTalliesUntilComplete}
             />
           ) : (
             <VotingView
@@ -880,6 +895,8 @@ function EditEventDialog({
   const [maxSubmissionsPerMember, setMaxSubmissionsPerMember] = useState(event.maxSubmissionsPerMember?.toString() ?? "1");
   const [allowPreviouslyRead, setAllowPreviouslyRead] = useState(event.allowPreviouslyRead ?? false);
   const [adminCurated, setAdminCurated] = useState(event.adminCurated ?? false);
+  const [anonymousVoting, setAnonymousVoting] = useState(event.anonymousVoting ?? false);
+  const [hideTalliesUntilComplete, setHideTalliesUntilComplete] = useState(event.hideTalliesUntilComplete ?? false);
   const [anonymousSubmissions, setAnonymousSubmissions] = useState(event.anonymousSubmissions ?? false);
   const [submissionDeadline, setSubmissionDeadline] = useState(
     event.submissionDeadline ? new Date(event.submissionDeadline).toISOString().slice(0, 16) : ""
@@ -911,6 +928,8 @@ function EditEventDialog({
     if (allowPreviouslyRead !== event.allowPreviouslyRead) data.allowPreviouslyRead = allowPreviouslyRead;
     if (anonymousSubmissions !== event.anonymousSubmissions) data.anonymousSubmissions = anonymousSubmissions;
     if (adminCurated !== (event.adminCurated ?? false)) data.adminCurated = adminCurated;
+    if (anonymousVoting !== (event.anonymousVoting ?? false)) data.anonymousVoting = anonymousVoting;
+    if (hideTalliesUntilComplete !== (event.hideTalliesUntilComplete ?? false)) data.hideTalliesUntilComplete = hideTalliesUntilComplete;
     const newSubDeadline = submissionDeadline ? new Date(submissionDeadline) : null;
     const oldSubDeadline = event.submissionDeadline ? new Date(event.submissionDeadline).toISOString().slice(0, 16) : "";
     if (submissionDeadline !== oldSubDeadline) data.submissionDeadline = newSubDeadline;
@@ -985,6 +1004,26 @@ function EditEventDialog({
             </div>
             <Switch checked={adminCurated} onCheckedChange={setAdminCurated} />
           </div>
+          {votingScheme !== "no_vote" && (
+            <>
+              <Separator />
+              <p className="text-sm font-medium">Voting Options</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Anonymous Voting</Label>
+                  <p className="text-xs text-muted-foreground">Hide who voted for what</p>
+                </div>
+                <Switch checked={anonymousVoting} onCheckedChange={setAnonymousVoting} />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Hide Tallies Until Complete</Label>
+                  <p className="text-xs text-muted-foreground">Keep vote counts hidden until matchup is resolved</p>
+                </div>
+                <Switch checked={hideTalliesUntilComplete} onCheckedChange={setHideTalliesUntilComplete} />
+              </div>
+            </>
+          )}
           <Separator />
           <div className="space-y-2">
             <Label>Submission Deadline</Label>
@@ -1085,7 +1124,7 @@ function VotingView({
                   <p className="font-semibold truncate">{sub.bookTitle}</p>
                   <p className="text-sm text-muted-foreground">{sub.bookAuthor}</p>
                 </div>
-                {results?.results && (
+                {results?.results && !(event.hideTalliesUntilComplete && event.status !== "completed") && (
                   <div className="text-right shrink-0">
                     <p className="font-bold">
                       {results.results.find((r: any) => r.bookId === sub.bookId)?.votes ?? 0}
@@ -1199,22 +1238,28 @@ function VotingView({
       )}
       {results?.results && results.results.length > 0 && (
         <div className="space-y-2">
-          <h4 className="font-medium">Current Results</h4>
-          {results.results.map((r: any, idx: number) => (
-            <div
-              key={r.bookId}
-              className="flex items-center gap-3 p-3 rounded border"
-            >
-              <span className="font-bold text-primary w-6 text-center">
-                {idx + 1}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="font-medium truncate">{r.bookTitle}</p>
-                <p className="text-xs text-muted-foreground">{r.bookAuthor}</p>
+          <h4 className="font-medium">
+            {event.hideTalliesUntilComplete && event.status !== "completed" ? "Results (hidden until voting ends)" : "Current Results"}
+          </h4>
+          {event.hideTalliesUntilComplete && event.status !== "completed" ? (
+            <p className="text-sm text-muted-foreground">Vote tallies are hidden until the results are finalized.</p>
+          ) : (
+            results.results.map((r: any, idx: number) => (
+              <div
+                key={r.bookId}
+                className="flex items-center gap-3 p-3 rounded border"
+              >
+                <span className="font-bold text-primary w-6 text-center">
+                  {idx + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium truncate">{r.bookTitle}</p>
+                  <p className="text-xs text-muted-foreground">{r.bookAuthor}</p>
+                </div>
+                <span className="font-bold">{r.votes} votes</span>
               </div>
-              <span className="font-bold">{r.votes} votes</span>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       )}
     </div>

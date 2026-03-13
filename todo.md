@@ -213,3 +213,15 @@
 - [x] Add "Admin Curated" badge on event detail page header
 - [x] Add adminCurated toggle to Edit Event dialog
 - [x] Write tests for admin-curated submissions (88 total passing)
+
+## Anonymous Votes & Hidden Tallies (v5.3)
+- [x] Add anonymousVoting boolean to events schema (default false) — hides who voted for what in bracket/voting views
+- [x] Add hideTalliesUntilComplete boolean to events schema (default false) — hides vote counts until each matchup is determined
+- [x] Add toggles for both options in event creation form (NewEvent page)
+- [x] Add toggles for both options in Edit Event dialog (EventDetail page)
+- [x] Backend: strip voter identity from bracket/voting results when anonymousVoting is true (for non-admins)
+- [x] Frontend: hide voter names in bracket view when anonymousVoting is true
+- [x] Frontend: hide vote tallies/counts in bracket and simple/ranked views when hideTalliesUntilComplete is true and matchup/event is not yet completed
+- [x] Add "Anonymous Votes" and "Hidden Tallies" badges on event detail header
+- [x] Write tests for anonymous voting and hidden tallies (93 total passing)
+- [x] Update recreation prompt

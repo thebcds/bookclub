@@ -112,6 +112,8 @@ export const events = mysqlTable("events", {
   maxTotalSubmissions: int("maxTotalSubmissions").default(8).notNull(),
   maxSubmissionsPerMember: int("maxSubmissionsPerMember").default(1).notNull(),
   adminCurated: boolean("adminCurated").default(false).notNull(),
+  anonymousVoting: boolean("anonymousVoting").default(false).notNull(),
+  hideTalliesUntilComplete: boolean("hideTalliesUntilComplete").default(false).notNull(),
   submissionDeadline: timestamp("submissionDeadline"),
   votingDeadline: timestamp("votingDeadline"),
   readingDeadline: timestamp("readingDeadline"),

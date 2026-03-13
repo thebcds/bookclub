@@ -1137,3 +1137,131 @@ describe("admin-curated submissions", () => {
     ).rejects.toThrow();
   });
 });
+
+// ─── Anonymous Voting & Hidden Tallies Tests ────────────────────────
+describe("anonymous voting and hidden tallies", () => {
+  it("creates an event with anonymousVoting and hideTalliesUntilComplete", async () => {
+    const adminCaller = appRouter.createCaller(createCtx(createAdminUser()));
+    const result = await adminCaller.events.create({
+      groupId: 1,
+      title: "Anonymous Voting Event",
+      votingScheme: "tournament",
+      anonymousVoting: true,
+      hideTalliesUntilComplete: true,
+    });
+    expect(result.id).toBeDefined();
+    const event = await adminCaller.events.getById({ id: result.id });
+    expect(event.anonymousVoting).toBe(true);
+    expect(event.hideTalliesUntilComplete).toBe(true);
+  });
+
+  it("creates an event with defaults (both false)", async () => {
+    const adminCaller = appRouter.createCaller(createCtx(createAdminUser()));
+    const result = await adminCaller.events.create({
+      groupId: 1,
+      title: "Default Voting Event",
+      votingScheme: "simple_majority",
+    });
+    const event = await adminCaller.events.getById({ id: result.id });
+    expect(event.anonymousVoting).toBe(false);
+    expect(event.hideTalliesUntilComplete).toBe(false);
+  });
+
+  it("updates anonymousVoting and hideTalliesUntilComplete via events.update", async () => {
+    const adminCaller = appRouter.createCaller(createCtx(createAdminUser()));
+    const result = await adminCaller.events.create({
+      groupId: 1,
+      title: "Update Voting Options Event",
+      votingScheme: "tournament",
+    });
+    const event = await adminCaller.events.getById({ id: result.id });
+    expect(event.anonymousVoting).toBe(false);
+    expect(event.hideTalliesUntilComplete).toBe(false);
+
+    // The update call should succeed without errors
+    await expect(
+      adminCaller.events.update({
+        groupId: 1,
+        eventId: result.id,
+        anonymousVoting: true,
+        hideTalliesUntilComplete: true,
+      })
+    ).resolves.toEqual({ success: true });
+  });
+
+  it("strips voter identity from bracket votes when anonymousVoting is true for non-creator", async () => {
+    const adminCaller = appRouter.createCaller(createCtx(createAdminUser()));
+
+    // Create event with anonymous voting
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Anon Bracket Event",
+      votingScheme: "tournament",
+      anonymousVoting: true,
+      maxTotalSubmissions: 4,
+      maxSubmissionsPerMember: 4,
+    });
+
+    // Add 2 books and submit them
+    const book1 = await adminCaller.books.create({ groupId: 1, title: "Book A", author: "Author A" });
+    const book2 = await adminCaller.books.create({ groupId: 1, title: "Book B", author: "Author B" });
+    await adminCaller.submissions.create({ groupId: 1, eventId: event.id, bookId: book1.id });
+    await adminCaller.submissions.create({ groupId: 1, eventId: event.id, bookId: book2.id });
+
+    // Start voting (generates bracket)
+    await adminCaller.events.startVoting({ groupId: 1, eventId: event.id });
+
+    // Get brackets
+    const brackets = await adminCaller.brackets.getForEvent({ eventId: event.id });
+    const votingBracket = brackets.find((b) => b.status === "voting");
+    if (!votingBracket) return; // Skip if no voting bracket
+
+    // Cast a vote as admin
+    await adminCaller.brackets.vote({ bracketId: votingBracket.id, bookId: book1.id, eventId: event.id });
+
+    // Admin (creator) should see full voter info
+    const adminVotes = await adminCaller.brackets.getVotes({ bracketId: votingBracket.id, eventId: event.id });
+    expect(adminVotes.length).toBeGreaterThan(0);
+    // Admin should see their own userId
+    expect(adminVotes[0].userId).toBe(99);
+
+    // Regular member should see anonymized votes
+    const memberCaller = appRouter.createCaller(createCtx(createMockUser()));
+    const memberVotes = await memberCaller.brackets.getVotes({ bracketId: votingBracket.id, eventId: event.id });
+    expect(memberVotes.length).toBeGreaterThan(0);
+    // Voter identity should be stripped
+    expect(memberVotes[0].userId).toBe(0);
+  });
+
+  it("does not strip voter identity when anonymousVoting is false", async () => {
+    const adminCaller = appRouter.createCaller(createCtx(createAdminUser()));
+
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Non-Anon Bracket Event",
+      votingScheme: "tournament",
+      anonymousVoting: false,
+      maxTotalSubmissions: 4,
+      maxSubmissionsPerMember: 4,
+    });
+
+    const book1 = await adminCaller.books.create({ groupId: 1, title: "Book C", author: "Author C" });
+    const book2 = await adminCaller.books.create({ groupId: 1, title: "Book D", author: "Author D" });
+    await adminCaller.submissions.create({ groupId: 1, eventId: event.id, bookId: book1.id });
+    await adminCaller.submissions.create({ groupId: 1, eventId: event.id, bookId: book2.id });
+
+    await adminCaller.events.startVoting({ groupId: 1, eventId: event.id });
+
+    const brackets = await adminCaller.brackets.getForEvent({ eventId: event.id });
+    const votingBracket = brackets.find((b) => b.status === "voting");
+    if (!votingBracket) return;
+
+    await adminCaller.brackets.vote({ bracketId: votingBracket.id, bookId: book1.id, eventId: event.id });
+
+    // Regular member should see full voter info since anonymousVoting is false
+    const memberCaller = appRouter.createCaller(createCtx(createMockUser()));
+    const memberVotes = await memberCaller.brackets.getVotes({ bracketId: votingBracket.id, eventId: event.id });
+    expect(memberVotes.length).toBeGreaterThan(0);
+    expect(memberVotes[0].userId).toBe(99); // Not anonymized
+  });
+});

@@ -28,9 +28,11 @@ type Props = {
   brackets: BracketMatch[];
   eventStatus: string;
   isAdmin: boolean;
+  anonymousVoting?: boolean;
+  hideTalliesUntilComplete?: boolean;
 };
 
-export default function BracketTree({ eventId, groupId, brackets, eventStatus, isAdmin }: Props) {
+export default function BracketTree({ eventId, groupId, brackets, eventStatus, isAdmin, anonymousVoting, hideTalliesUntilComplete }: Props) {
   const utils = trpc.useUtils();
 
   const voteMutation = trpc.brackets.vote.useMutation({
@@ -107,6 +109,8 @@ export default function BracketTree({ eventId, groupId, brackets, eventStatus, i
                   eventId={eventId}
                   eventStatus={eventStatus}
                   isAdmin={isAdmin}
+                  anonymousVoting={anonymousVoting}
+                  hideTalliesUntilComplete={hideTalliesUntilComplete}
                   onVote={(bracketId, bookId) =>
                     voteMutation.mutate({ bracketId, bookId, eventId })
                   }
@@ -136,6 +140,8 @@ export default function BracketTree({ eventId, groupId, brackets, eventStatus, i
               eventId={eventId}
               eventStatus={eventStatus}
               isAdmin={isAdmin}
+              anonymousVoting={anonymousVoting}
+              hideTalliesUntilComplete={hideTalliesUntilComplete}
               isFinal
               onVote={(bookId) =>
                 voteMutation.mutate({ bracketId: finalMatch.id, bookId, eventId })
@@ -170,6 +176,8 @@ export default function BracketTree({ eventId, groupId, brackets, eventStatus, i
                   eventId={eventId}
                   eventStatus={eventStatus}
                   isAdmin={isAdmin}
+                  anonymousVoting={anonymousVoting}
+                  hideTalliesUntilComplete={hideTalliesUntilComplete}
                   onVote={(bracketId, bookId) =>
                     voteMutation.mutate({ bracketId, bookId, eventId })
                   }
@@ -196,6 +204,8 @@ function RoundColumn({
   eventId,
   eventStatus,
   isAdmin,
+  anonymousVoting,
+  hideTalliesUntilComplete,
   onVote,
   onResolve,
   isVoting,
@@ -207,6 +217,8 @@ function RoundColumn({
   eventId: number;
   eventStatus: string;
   isAdmin: boolean;
+  anonymousVoting?: boolean;
+  hideTalliesUntilComplete?: boolean;
   onVote: (bracketId: number, bookId: number) => void;
   onResolve: (bracketId: number) => void;
   isVoting: boolean;
@@ -232,6 +244,8 @@ function RoundColumn({
             eventId={eventId}
             eventStatus={eventStatus}
             isAdmin={isAdmin}
+            anonymousVoting={anonymousVoting}
+            hideTalliesUntilComplete={hideTalliesUntilComplete}
             onVote={(bookId) => onVote(match.id, bookId)}
             onResolve={() => onResolve(match.id)}
             isVoting={isVoting}
@@ -248,6 +262,8 @@ function MatchNode({
   eventId,
   eventStatus,
   isAdmin,
+  anonymousVoting,
+  hideTalliesUntilComplete,
   isFinal,
   onVote,
   onResolve,
@@ -258,6 +274,8 @@ function MatchNode({
   eventId: number;
   eventStatus: string;
   isAdmin: boolean;
+  anonymousVoting?: boolean;
+  hideTalliesUntilComplete?: boolean;
   isFinal?: boolean;
   onVote: (bookId: number) => void;
   onResolve: () => void;
@@ -269,13 +287,16 @@ function MatchNode({
     { enabled: match.status === "voting" }
   );
   const { data: votes } = trpc.brackets.getVotes.useQuery(
-    { bracketId: match.id },
+    { bracketId: match.id, eventId },
     { enabled: match.status !== "pending" }
   );
 
   const book1Votes = votes?.filter((v) => v.bookId === match.book1Id).length ?? 0;
   const book2Votes = votes?.filter((v) => v.bookId === match.book2Id).length ?? 0;
   const canVote = match.status === "voting" && !myVote && eventStatus === "voting";
+
+  // Should we hide tallies? Only hide when match is not yet completed and the option is enabled
+  const shouldHideTallies = hideTalliesUntilComplete && match.status !== "completed";
 
   const borderClass = isFinal
     ? "border-2 border-amber-400/50 shadow-lg shadow-amber-100/50"
@@ -302,7 +323,7 @@ function MatchNode({
         seed={match.book1Seed}
         isWinner={match.winnerId === match.book1Id}
         isMyVote={myVote?.bookId === match.book1Id}
-        voteCount={match.status !== "pending" ? book1Votes : undefined}
+        voteCount={shouldHideTallies ? undefined : (match.status !== "pending" ? book1Votes : undefined)}
         canVote={canVote}
         onVote={() => match.book1Id && onVote(match.book1Id)}
       />
@@ -320,7 +341,7 @@ function MatchNode({
         seed={match.book2Seed}
         isWinner={match.winnerId === match.book2Id}
         isMyVote={myVote?.bookId === match.book2Id}
-        voteCount={match.status !== "pending" ? book2Votes : undefined}
+        voteCount={shouldHideTallies ? undefined : (match.status !== "pending" ? book2Votes : undefined)}
         canVote={canVote}
         onVote={() => match.book2Id && onVote(match.book2Id)}
       />

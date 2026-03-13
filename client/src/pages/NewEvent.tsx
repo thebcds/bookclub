@@ -68,6 +68,8 @@ export default function NewEventPage() {
   const [maxTotalSubmissions, setMaxTotalSubmissions] = useState("8");
   const [maxSubmissionsPerMember, setMaxSubmissionsPerMember] = useState("1");
   const [adminCurated, setAdminCurated] = useState(false);
+  const [anonymousVoting, setAnonymousVoting] = useState(false);
+  const [hideTalliesUntilComplete, setHideTalliesUntilComplete] = useState(false);
   const [submissionDeadline, setSubmissionDeadline] = useState("");
   const [votingDeadline, setVotingDeadline] = useState("");
   const [readingDeadline, setReadingDeadline] = useState("");
@@ -109,6 +111,8 @@ export default function NewEventPage() {
       maxTotalSubmissions: totalSubs,
       maxSubmissionsPerMember: adminCurated ? totalSubs : perMember,
       adminCurated,
+      anonymousVoting,
+      hideTalliesUntilComplete,
       submissionDeadline: submissionDeadline
         ? new Date(submissionDeadline)
         : undefined,
@@ -363,6 +367,40 @@ export default function NewEventPage() {
             </div>
           </CardContent>
         </Card>
+
+        {votingScheme !== "no_vote" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Voting Options</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Anonymous Voting</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Hide who voted for what in the bracket/voting view
+                  </p>
+                </div>
+                <Switch
+                  checked={anonymousVoting}
+                  onCheckedChange={setAnonymousVoting}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Hide Tallies Until Complete</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Keep vote counts hidden until each matchup is resolved
+                  </p>
+                </div>
+                <Switch
+                  checked={hideTalliesUntilComplete}
+                  onCheckedChange={setHideTalliesUntilComplete}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>

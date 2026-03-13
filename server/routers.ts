@@ -289,6 +289,8 @@ export const appRouter = router({
         maxTotalSubmissions: z.number().min(1).max(64).default(8),
         maxSubmissionsPerMember: z.number().min(1).max(64).default(1),
         adminCurated: z.boolean().default(false),
+        anonymousVoting: z.boolean().default(false),
+        hideTalliesUntilComplete: z.boolean().default(false),
         submissionDeadline: z.date().optional(), votingDeadline: z.date().optional(), readingDeadline: z.date().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -342,6 +344,8 @@ export const appRouter = router({
         maxTotalSubmissions: z.number().min(1).max(64).optional(),
         maxSubmissionsPerMember: z.number().min(1).max(64).optional(),
         adminCurated: z.boolean().optional(),
+        anonymousVoting: z.boolean().optional(),
+        hideTalliesUntilComplete: z.boolean().optional(),
         submissionDeadline: z.date().nullable().optional(),
         votingDeadline: z.date().nullable().optional(),
         readingDeadline: z.date().nullable().optional(),
@@ -494,9 +498,16 @@ export const appRouter = router({
         return { success: true };
       }),
     getVotes: protectedProcedure
-      .input(z.object({ bracketId: z.number() }))
-      .query(async ({ input }) => {
-        return db.getBracketVotes(input.bracketId);
+      .input(z.object({ bracketId: z.number(), eventId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const votes = await db.getBracketVotes(input.bracketId);
+        const event = await db.getEventById(input.eventId);
+        if (!event) return votes;
+        // If anonymous voting, strip voter identity for non-creators
+        if (event.anonymousVoting && ctx.user.id !== event.createdBy) {
+          return votes.map((v: any) => ({ ...v, userId: 0, voterName: undefined }));
+        }
+        return votes;
       }),
     myVote: protectedProcedure
       .input(z.object({ bracketId: z.number() }))
