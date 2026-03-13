@@ -288,6 +288,7 @@ export const appRouter = router({
         anonymousSubmissions: z.boolean().default(false),
         maxTotalSubmissions: z.number().min(1).max(64).default(8),
         maxSubmissionsPerMember: z.number().min(1).max(64).default(1),
+        adminCurated: z.boolean().default(false),
         submissionDeadline: z.date().optional(), votingDeadline: z.date().optional(), readingDeadline: z.date().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -340,6 +341,7 @@ export const appRouter = router({
         anonymousSubmissions: z.boolean().optional(),
         maxTotalSubmissions: z.number().min(1).max(64).optional(),
         maxSubmissionsPerMember: z.number().min(1).max(64).optional(),
+        adminCurated: z.boolean().optional(),
         submissionDeadline: z.date().nullable().optional(),
         votingDeadline: z.date().nullable().optional(),
         readingDeadline: z.date().nullable().optional(),
@@ -403,10 +405,16 @@ export const appRouter = router({
         const event = await db.getEventById(input.eventId);
         if (!event) throw new TRPCError({ code: "NOT_FOUND" });
         if (event.status !== "submissions_open") throw new TRPCError({ code: "BAD_REQUEST", message: "Submissions are closed" });
-        // Check per-member submission limit
-        const userSubs = await db.getUserSubmissionsForEvent(input.eventId, ctx.user.id);
-        if (userSubs.length >= event.maxSubmissionsPerMember) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: `You've reached your submission limit (${event.maxSubmissionsPerMember} per member)` });
+        // Admin-curated mode: only the event creator can submit
+        if (event.adminCurated && ctx.user.id !== event.createdBy) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "This event has admin-curated submissions. Only the event creator can submit books." });
+        }
+        // Check per-member submission limit (skip for admin-curated mode — admin uses maxTotalSubmissions as their limit)
+        if (!event.adminCurated) {
+          const userSubs = await db.getUserSubmissionsForEvent(input.eventId, ctx.user.id);
+          if (userSubs.length >= event.maxSubmissionsPerMember) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: `You've reached your submission limit (${event.maxSubmissionsPerMember} per member)` });
+          }
         }
         // Check total submission limit
         const subs = await db.getEventSubmissions(input.eventId);

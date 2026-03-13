@@ -201,3 +201,15 @@
 - [x] Tests for group tags creation and validation
 - [x] Tests for invite notification routes
 - [x] All 82 tests passing
+
+## Invite Link Permission Bug (v5.1)
+- [ ] Fix: invite link still shows "You don't have permission" for other users even when site is public
+
+## Admin-Curated Submissions (v5.2)
+- [x] Add adminCurated boolean to events schema (default false)
+- [x] When adminCurated is true, only the event creator can submit books (bypass per-member limit, use maxTotalSubmissions as their limit)
+- [x] Add "Admin curates all submissions" toggle to event creation form
+- [x] Update submission UI: non-admin members see "Admin is curating submissions" message instead of submit form
+- [x] Add "Admin Curated" badge on event detail page header
+- [x] Add adminCurated toggle to Edit Event dialog
+- [x] Write tests for admin-curated submissions (88 total passing)

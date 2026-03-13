@@ -1027,3 +1027,113 @@ describe("invite notifications", () => {
     ).rejects.toThrow();
   });
 });
+
+// ─── Admin-Curated Submissions Tests ───────────────────────────────
+describe("admin-curated submissions", () => {
+  it("creates an event with adminCurated flag", async () => {
+    const caller = appRouter.createCaller(createCtx(createAdminUser()));
+    const result = await caller.events.create({
+      groupId: 1,
+      title: "Admin Curated Event",
+      votingScheme: "tournament",
+      adminCurated: true,
+      maxTotalSubmissions: 8,
+    });
+    expect(result.id).toBeDefined();
+  });
+
+  it("creates an event without adminCurated flag (defaults to false)", async () => {
+    const caller = appRouter.createCaller(createCtx(createAdminUser()));
+    const result = await caller.events.create({
+      groupId: 1,
+      title: "Normal Event",
+      votingScheme: "simple_majority",
+    });
+    expect(result.id).toBeDefined();
+  });
+
+  it("admin can update event to enable adminCurated", async () => {
+    const caller = appRouter.createCaller(createCtx(createAdminUser()));
+    // Create a normal event first
+    const event = await caller.events.create({
+      groupId: 1,
+      title: "Switchable Event",
+      votingScheme: "simple_majority",
+    });
+    // Update to admin-curated
+    const result = await caller.events.update({
+      groupId: 1,
+      eventId: event.id,
+      adminCurated: true,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("non-creator cannot submit to admin-curated event", async () => {
+    const adminCaller = appRouter.createCaller(createCtx(createAdminUser()));
+    // Create admin-curated event
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Curated Only",
+      votingScheme: "simple_majority",
+      adminCurated: true,
+      maxTotalSubmissions: 4,
+    });
+
+    // Create a book as regular member
+    const memberCaller = appRouter.createCaller(createCtx(createMockUser()));
+    const book = await memberCaller.books.create({
+      groupId: 1,
+      title: "Member's Pick",
+      author: "Some Author",
+    });
+
+    // Regular member tries to submit — should be rejected
+    await expect(
+      memberCaller.submissions.create({
+        groupId: 1,
+        eventId: event.id,
+        bookId: book.id,
+      })
+    ).rejects.toThrow("admin-curated");
+  });
+
+  it("event creator can submit to admin-curated event", async () => {
+    const adminCaller = appRouter.createCaller(createCtx(createAdminUser()));
+    // Create admin-curated event
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Creator Submits",
+      votingScheme: "simple_majority",
+      adminCurated: true,
+      maxTotalSubmissions: 4,
+    });
+
+    // Create a book
+    const book = await adminCaller.books.create({
+      groupId: 1,
+      title: "Admin's Pick",
+      author: "Admin Author",
+    });
+
+    // Creator submits — should succeed
+    const result = await adminCaller.submissions.create({
+      groupId: 1,
+      eventId: event.id,
+      bookId: book.id,
+    });
+    expect(result.id).toBeDefined();
+  });
+
+  it("non-admin cannot create admin-curated event", async () => {
+    const memberCaller = appRouter.createCaller(createCtx(createMockUser()));
+    await expect(
+      memberCaller.events.create({
+        groupId: 1,
+        title: "Member Curated",
+        votingScheme: "simple_majority",
+        adminCurated: true,
+      })
+    ).rejects.toThrow();
+  });
+});

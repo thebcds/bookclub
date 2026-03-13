@@ -67,6 +67,7 @@ export default function NewEventPage() {
   const [anonymousSubmissions, setAnonymousSubmissions] = useState(false);
   const [maxTotalSubmissions, setMaxTotalSubmissions] = useState("8");
   const [maxSubmissionsPerMember, setMaxSubmissionsPerMember] = useState("1");
+  const [adminCurated, setAdminCurated] = useState(false);
   const [submissionDeadline, setSubmissionDeadline] = useState("");
   const [votingDeadline, setVotingDeadline] = useState("");
   const [readingDeadline, setReadingDeadline] = useState("");
@@ -106,7 +107,8 @@ export default function NewEventPage() {
       minRating: minRating ? parseInt(minRating) : undefined,
       anonymousSubmissions,
       maxTotalSubmissions: totalSubs,
-      maxSubmissionsPerMember: perMember,
+      maxSubmissionsPerMember: adminCurated ? totalSubs : perMember,
+      adminCurated,
       submissionDeadline: submissionDeadline
         ? new Date(submissionDeadline)
         : undefined,
@@ -201,9 +203,28 @@ export default function NewEventPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Submission Quantity</CardTitle>
+            <CardTitle className="text-base">Submission Settings</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
+              <div>
+                <Label>Admin Curates All Submissions</Label>
+                <p className="text-xs text-muted-foreground">
+                  Only you (the event creator) can submit books. Use this when you want to hand-pick all the options for the group to vote on.
+                </p>
+              </div>
+              <Switch
+                checked={adminCurated}
+                onCheckedChange={(checked) => {
+                  setAdminCurated(checked);
+                  if (checked) {
+                    setMaxSubmissionsPerMember(maxTotalSubmissions);
+                  } else {
+                    setMaxSubmissionsPerMember("1");
+                  }
+                }}
+              />
+            </div>
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Label htmlFor="maxTotalSubs">Total Submissions</Label>
@@ -239,29 +260,31 @@ export default function NewEventPage() {
                 </p>
               )}
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="maxPerMember">Submissions Per Member</Label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-3.5 w-3.5 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="max-w-xs text-xs">
-                      How many books each member can submit. Set to 1 for one book per person, or higher to allow multiple submissions per member.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
+            {!adminCurated && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="maxPerMember">Submissions Per Member</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="max-w-xs text-xs">
+                        How many books each member can submit. Set to 1 for one book per person, or higher to allow multiple submissions per member.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Input
+                  id="maxPerMember"
+                  type="number"
+                  min="1"
+                  max={maxTotalSubmissions}
+                  value={maxSubmissionsPerMember}
+                  onChange={(e) => setMaxSubmissionsPerMember(e.target.value)}
+                />
               </div>
-              <Input
-                id="maxPerMember"
-                type="number"
-                min="1"
-                max={maxTotalSubmissions}
-                value={maxSubmissionsPerMember}
-                onChange={(e) => setMaxSubmissionsPerMember(e.target.value)}
-              />
-            </div>
+            )}
           </CardContent>
         </Card>
 

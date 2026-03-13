@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { useGroup } from "@/contexts/GroupContext";
 import { trpc } from "@/lib/trpc";
 import {
@@ -55,6 +56,7 @@ import { useLocation, useParams } from "wouter";
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
   const eventId = parseInt(id);
+  const { user } = useAuth();
   const { activeGroup, isGroupAdmin } = useGroup();
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
@@ -181,6 +183,12 @@ export default function EventDetailPage() {
             >
               {event.status === "submissions_open" ? "Submissions Open" : event.status}
             </Badge>
+            {event.adminCurated && (
+              <Badge variant="outline" className="border-amber-400 text-amber-700 gap-1">
+                <Crown className="h-3 w-3" />
+                Admin Curated
+              </Badge>
+            )}
           </div>
         </div>
         {isGroupAdmin && (
@@ -388,6 +396,7 @@ export default function EventDetailPage() {
             event={event}
             subs={subs ?? []}
             mySubmission={mySubmission}
+            currentUserId={user?.id}
           />
         </TabsContent>
 
@@ -562,11 +571,13 @@ function SubmissionsTab({
   event,
   subs,
   mySubmission,
+  currentUserId,
 }: {
   eventId: number;
   event: any;
   subs: any[];
   mySubmission: any;
+  currentUserId?: number;
 }) {
   const [showAddBook, setShowAddBook] = useState(false);
   const utils = trpc.useUtils();
@@ -576,21 +587,36 @@ function SubmissionsTab({
       {event.status === "submissions_open" && (
     (() => {
       const mySubCount = Array.isArray(mySubmission) ? mySubmission.length : (mySubmission ? 1 : 0);
-      const perMemberLimit = event.maxSubmissionsPerMember ?? 1;
+      const perMemberLimit = event.adminCurated ? (event.maxTotalSubmissions ?? 8) : (event.maxSubmissionsPerMember ?? 1);
       const totalSubs = subs?.length ?? 0;
       const totalLimit = event.maxTotalSubmissions ?? 8;
+      const isCreator = event.createdBy === currentUserId;
+
+      // Admin-curated mode: only the event creator can submit
+      if (event.adminCurated && !isCreator) {
+        return (
+          <div className="rounded-lg border p-4 bg-muted/30">
+            <p className="text-sm text-muted-foreground flex items-center gap-2">
+              <Crown className="h-4 w-4 text-amber-600" />
+              This event has admin-curated submissions. The event creator is selecting all books for the group to vote on.
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">{totalSubs}/{totalLimit} books submitted so far.</p>
+          </div>
+        );
+      }
+
       const canSubmitMore = mySubCount < perMemberLimit && totalSubs < totalLimit;
       return canSubmitMore ? (
         <Dialog open={showAddBook} onOpenChange={setShowAddBook}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
-              Submit a Book {perMemberLimit > 1 && `(${mySubCount}/${perMemberLimit})`}
+              {event.adminCurated ? `Add a Book (${totalSubs}/${totalLimit})` : `Submit a Book ${perMemberLimit > 1 ? `(${mySubCount}/${perMemberLimit})` : ""}`}
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Submit a Book</DialogTitle>
+              <DialogTitle>{event.adminCurated ? "Add a Book to the Lineup" : "Submit a Book"}</DialogTitle>
             </DialogHeader>
             <SubmitBookForm
               eventId={eventId}
@@ -599,6 +625,7 @@ function SubmissionsTab({
                 setShowAddBook(false);
                 utils.submissions.listForEvent.invalidate({ eventId });
                 utils.submissions.mySubmission.invalidate({ eventId });
+                utils.submissions.mySubmissions.invalidate({ eventId });
               }}
             />
           </DialogContent>
@@ -606,9 +633,11 @@ function SubmissionsTab({
       ) : (
         <p className="text-sm text-muted-foreground flex items-center gap-2">
           <Check className="h-4 w-4 text-emerald-600" />
-          {perMemberLimit > 1
-            ? `You've submitted ${mySubCount}/${perMemberLimit} books for this event.`
-            : "You've submitted your book for this event."
+          {event.adminCurated
+            ? `All ${totalLimit} books have been added to the lineup.`
+            : perMemberLimit > 1
+              ? `You've submitted ${mySubCount}/${perMemberLimit} books for this event.`
+              : "You've submitted your book for this event."
           }
         </p>
       );
@@ -850,6 +879,7 @@ function EditEventDialog({
   const [maxTotalSubmissions, setMaxTotalSubmissions] = useState(event.maxTotalSubmissions?.toString() ?? "8");
   const [maxSubmissionsPerMember, setMaxSubmissionsPerMember] = useState(event.maxSubmissionsPerMember?.toString() ?? "1");
   const [allowPreviouslyRead, setAllowPreviouslyRead] = useState(event.allowPreviouslyRead ?? false);
+  const [adminCurated, setAdminCurated] = useState(event.adminCurated ?? false);
   const [anonymousSubmissions, setAnonymousSubmissions] = useState(event.anonymousSubmissions ?? false);
   const [submissionDeadline, setSubmissionDeadline] = useState(
     event.submissionDeadline ? new Date(event.submissionDeadline).toISOString().slice(0, 16) : ""
@@ -880,6 +910,7 @@ function EditEventDialog({
     }
     if (allowPreviouslyRead !== event.allowPreviouslyRead) data.allowPreviouslyRead = allowPreviouslyRead;
     if (anonymousSubmissions !== event.anonymousSubmissions) data.anonymousSubmissions = anonymousSubmissions;
+    if (adminCurated !== (event.adminCurated ?? false)) data.adminCurated = adminCurated;
     const newSubDeadline = submissionDeadline ? new Date(submissionDeadline) : null;
     const oldSubDeadline = event.submissionDeadline ? new Date(event.submissionDeadline).toISOString().slice(0, 16) : "";
     if (submissionDeadline !== oldSubDeadline) data.submissionDeadline = newSubDeadline;
@@ -946,6 +977,13 @@ function EditEventDialog({
           <div className="flex items-center justify-between">
             <Label>Anonymous Submissions</Label>
             <Switch checked={anonymousSubmissions} onCheckedChange={setAnonymousSubmissions} />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Admin Curated</Label>
+              <p className="text-xs text-muted-foreground">Only the event creator can submit books</p>
+            </div>
+            <Switch checked={adminCurated} onCheckedChange={setAdminCurated} />
           </div>
           <Separator />
           <div className="space-y-2">

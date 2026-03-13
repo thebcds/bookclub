@@ -1,0 +1,1 @@
+ALTER TABLE `events` ADD `adminCurated` boolean DEFAULT false NOT NULL;
