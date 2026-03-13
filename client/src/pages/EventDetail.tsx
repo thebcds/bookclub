@@ -32,8 +32,11 @@ import {
   Plus,
   RotateCcw,
   Settings2,
+  Trash2,
   Trophy,
   Vote,
+  X,
+  Bell,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -414,6 +417,9 @@ export default function EventDetailPage() {
         </TabsContent>
 
         <TabsContent value="voting" className="mt-4">
+          {event.status === "voting" && event.createdBy === user?.id && (
+            <VotingReminderButton groupId={gid!} eventId={eventId} />
+          )}
           {event.votingScheme === "tournament" ? (
             <BracketTree
               eventId={eventId}
@@ -432,6 +438,7 @@ export default function EventDetailPage() {
               subs={subs ?? []}
               myVote={myVote}
               results={votingResults}
+              currentUserId={user?.id}
             />
           )}
         </TabsContent>
@@ -691,6 +698,14 @@ function SubmissionsTab({
                     by {sub.submitterName}
                   </p>
                 )}
+                {event.status === "submissions_open" && event.createdBy === currentUserId && (
+                  <RemoveSubmissionButton
+                    groupId={event.groupId}
+                    eventId={eventId}
+                    submissionId={sub.id}
+                    bookTitle={sub.bookTitle}
+                  />
+                )}
               </CardContent>
             </Card>
           ))}
@@ -702,6 +717,35 @@ function SubmissionsTab({
         </div>
       )}
     </div>
+  );
+}
+
+function RemoveSubmissionButton({ groupId, eventId, submissionId, bookTitle }: { groupId: number; eventId: number; submissionId: number; bookTitle: string }) {
+  const utils = trpc.useUtils();
+  const removeMutation = trpc.submissions.remove.useMutation({
+    onSuccess: () => {
+      utils.submissions.listForEvent.invalidate({ eventId });
+      utils.submissions.mySubmission.invalidate({ eventId });
+      utils.submissions.mySubmissions.invalidate({ eventId });
+      toast.success(`Removed "${bookTitle}"`);
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="shrink-0 text-muted-foreground hover:text-destructive"
+      onClick={() => {
+        if (confirm(`Remove "${bookTitle}" from submissions?`)) {
+          removeMutation.mutate({ groupId, eventId, submissionId });
+        }
+      }}
+      disabled={removeMutation.isPending}
+    >
+      {removeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+    </Button>
   );
 }
 
@@ -1047,6 +1091,33 @@ function EditEventDialog({
   );
 }
 
+function VotingReminderButton({ groupId, eventId }: { groupId: number; eventId: number }) {
+  const sendReminder = trpc.notifications.sendVotingReminder.useMutation({
+    onSuccess: (data) => {
+      if (data.nonVoterCount === 0) {
+        toast.success("Everyone has voted!");
+      } else {
+        toast.success(`Reminder sent! ${data.votedCount}/${data.totalMembers} have voted.`);
+      }
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  return (
+    <div className="mb-4">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => sendReminder.mutate({ groupId, eventId })}
+        disabled={sendReminder.isPending}
+      >
+        {sendReminder.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Bell className="h-4 w-4 mr-2" />}
+        Send Voting Reminder
+      </Button>
+    </div>
+  );
+}
+
 function VotingView({
   eventId,
   groupId,
@@ -1054,6 +1125,7 @@ function VotingView({
   subs,
   myVote,
   results,
+  currentUserId,
 }: {
   eventId: number;
   groupId: number;
@@ -1061,6 +1133,7 @@ function VotingView({
   subs: any[];
   myVote: any;
   results: any;
+  currentUserId?: number;
 }) {
   const utils = trpc.useUtils();
   const [rankedOrder, setRankedOrder] = useState<number[]>([]);

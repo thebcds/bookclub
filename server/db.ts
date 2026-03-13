@@ -690,3 +690,29 @@ export async function getUserStats(userId: number) {
     votesCast: Number(votesCount[0]?.count ?? 0),
   };
 }
+
+// ─── Submission Removal ──────────────────────────────────────────────
+export async function deleteSubmission(submissionId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(submissions).where(eq(submissions.id, submissionId));
+}
+
+export async function getSubmissionById(submissionId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(submissions).where(eq(submissions.id, submissionId)).limit(1);
+  return result[0] ?? undefined;
+}
+
+// ─── Voting Helpers ──────────────────────────────────────────────────
+export async function getEventVoterIds(eventId: number): Promise<number[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({ userId: votes.userId })
+    .from(votes)
+    .where(eq(votes.eventId, eventId))
+    .groupBy(votes.userId);
+  return rows.map(r => r.userId);
+}

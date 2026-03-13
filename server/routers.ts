@@ -154,8 +154,22 @@ export const appRouter = router({
       .input(z.object({ token: z.string() }))
       .mutation(async ({ ctx, input }) => {
         const inv = await db.getInvitationByToken(input.token);
-        if (!inv || inv.status !== "pending" || inv.expiresAt < new Date()) {
+        if (!inv) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired invitation" });
+        }
+        // If already accepted, just return success with the group ID
+        if (inv.status === "accepted") {
+          return { success: true, groupId: inv.groupId, alreadyAccepted: true };
+        }
+        if (inv.status !== "pending" || inv.expiresAt < new Date()) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired invitation" });
+        }
+        // Check if user is already a member of this group
+        const existingMembership = await db.getGroupMembership(inv.groupId, ctx.user.id);
+        if (existingMembership) {
+          // Mark invite as accepted but don't re-add member
+          await db.acceptInvitation(input.token, ctx.user.id);
+          return { success: true, groupId: inv.groupId, alreadyMember: true };
         }
         await db.acceptInvitation(input.token, ctx.user.id);
         return { success: true, groupId: inv.groupId };
@@ -274,6 +288,27 @@ export const appRouter = router({
           content: `${ctx.user.name ?? "An admin"} invited ${input.email} to join "${groupName}".\n\nInvite link: ${input.inviteLink}`,
         });
         return { success: true };
+      }),
+    sendVotingReminder: protectedProcedure
+      .input(z.object({ groupId: z.number(), eventId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await requireGroupAdmin(ctx.user.id, input.groupId);
+        const event = await db.getEventById(input.eventId);
+        if (!event) throw new TRPCError({ code: "NOT_FOUND" });
+        if (event.status !== "voting") throw new TRPCError({ code: "BAD_REQUEST", message: "Event is not in voting phase" });
+        // Get all group members and find who hasn't voted
+        const members = await db.getGroupMembers(input.groupId);
+        const voterIds = await db.getEventVoterIds(input.eventId);
+        const voterSet = new Set(voterIds);
+        const nonVoters = members.filter(m => !voterSet.has(m.id));
+        const nonVoterNames = nonVoters.map(m => m.name ?? m.email ?? "Unknown").join(", ");
+        const totalMembers = members.length;
+        const votedCount = totalMembers - nonVoters.length;
+        await notifyOwner({
+          title: `Voting Reminder: ${event.title}`,
+          content: `${votedCount}/${totalMembers} members have voted for "${event.title}".${nonVoters.length > 0 ? `\n\nMembers who haven't voted yet: ${nonVoterNames}` : "\n\nEveryone has voted!"}${event.votingDeadline ? `\n\nVoting deadline: ${new Date(event.votingDeadline).toLocaleDateString()}` : ""}`,
+        });
+        return { success: true, votedCount, totalMembers, nonVoterCount: nonVoters.length };
       }),
   }),
 
@@ -470,6 +505,25 @@ export const appRouter = router({
       .input(z.object({ eventId: z.number() }))
       .query(async ({ ctx, input }) => {
         return db.getUserSubmissionsForEvent(input.eventId, ctx.user.id);
+      }),
+    remove: protectedProcedure
+      .input(z.object({ groupId: z.number(), eventId: z.number(), submissionId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const event = await db.getEventById(input.eventId);
+        if (!event) throw new TRPCError({ code: "NOT_FOUND" });
+        // Only event creator (admin) can remove submissions
+        if (ctx.user.id !== event.createdBy) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Only the event creator can remove submissions" });
+        }
+        if (event.status !== "submissions_open") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Can only remove submissions while submissions are open" });
+        }
+        const submission = await db.getSubmissionById(input.submissionId);
+        if (!submission || submission.eventId !== input.eventId) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Submission not found" });
+        }
+        await db.deleteSubmission(input.submissionId);
+        return { success: true };
       }),
   }),
 

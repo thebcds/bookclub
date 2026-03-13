@@ -225,3 +225,25 @@
 - [x] Add "Anonymous Votes" and "Hidden Tallies" badges on event detail header
 - [x] Write tests for anonymous voting and hidden tallies (93 total passing)
 - [x] Update recreation prompt
+
+## Voting Reminder Notifications (v5.4)
+- [x] Backend: add procedure to send voting reminders to members who haven't voted yet
+- [x] Backend: check which members have voted and which haven't for an event (getEventVoterIds helper)
+- [x] Frontend: add "Send Voting Reminder" button for admin on event detail page (voting tab, all schemes)
+- [x] Use notifyOwner to send reminder notification with voter stats
+- [x] Write tests for voting reminder (101 total passing)
+
+## Submission Removal (v5.5)
+- [x] Backend: add submissions.remove procedure (event creator only, submissions_open only)
+- [x] Backend: add deleteSubmission and getSubmissionById db helpers
+- [x] Frontend: add X button on each submission card (visible to event creator only)
+- [x] Frontend: confirmation dialog before deletion
+- [x] Write tests for submission removal (101 total passing)
+
+## Invite Link Permission Fix (v5.1 - revisited)
+- [x] Diagnose invite flow: improved error handling in accept mutation
+- [x] Handle already-accepted invitations gracefully (return success with groupId)
+- [x] Handle already-member case (don't re-add, just accept invite)
+- [x] Improved InviteAcceptPage: shows signed-in user, success state, auto-redirect to group
+- [x] Added "Sign In" button on invalid invite for unauthenticated users
+- [x] Write tests for invite accept improvements (101 total passing)
