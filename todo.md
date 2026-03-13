@@ -247,3 +247,11 @@
 - [x] Improved InviteAcceptPage: shows signed-in user, success state, auto-redirect to group
 - [x] Added "Sign In" button on invalid invite for unauthenticated users
 - [x] Write tests for invite accept improvements (101 total passing)
+
+## Expandable Summaries & External Links (v5.6)
+- [x] Backend: add books.getSummary procedure (checks stored description, then Open Library, then LLM fallback)
+- [x] Backend: caches fetched summaries in the books.description column for future use
+- [x] Backend: added bookDescription and bookIsbn to getEventSubmissions query
+- [x] Frontend: add expandable summary section to each submission card (chevron toggle, lazy-loaded)
+- [x] Frontend: add external link icon on book titles (links to Open Library by ISBN or title+author search)
+- [x] Write tests for summary generation (104 total passing)

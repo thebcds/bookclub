@@ -232,6 +232,85 @@ export const appRouter = router({
         await requireGroupMember(ctx.user.id, input.groupId);
         return db.getReadBooks(input.groupId);
       }),
+    getSummary: protectedProcedure
+      .input(z.object({ bookId: z.number() }))
+      .query(async ({ input }) => {
+        const book = await db.getBookById(input.bookId);
+        if (!book) throw new TRPCError({ code: "NOT_FOUND", message: "Book not found" });
+        // If book already has a description stored, return it
+        if (book.description) return { summary: book.description, source: "stored" as const };
+        // Try Open Library first (by ISBN or title+author search)
+        try {
+          let olDesc: string | null = null;
+          if (book.isbn) {
+            const res = await fetch(`https://openlibrary.org/isbn/${book.isbn}.json`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data.description) {
+                olDesc = typeof data.description === "string" ? data.description : data.description?.value ?? null;
+              }
+              // Try the works endpoint if no description on edition
+              if (!olDesc && data.works?.[0]?.key) {
+                const wRes = await fetch(`https://openlibrary.org${data.works[0].key}.json`);
+                if (wRes.ok) {
+                  const wData = await wRes.json();
+                  if (wData.description) {
+                    olDesc = typeof wData.description === "string" ? wData.description : wData.description?.value ?? null;
+                  }
+                }
+              }
+            }
+          }
+          if (!olDesc) {
+            const searchRes = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.author)}&limit=1&fields=key`);
+            if (searchRes.ok) {
+              const searchData = await searchRes.json();
+              const workKey = searchData.docs?.[0]?.key;
+              if (workKey) {
+                const wRes = await fetch(`https://openlibrary.org${workKey}.json`);
+                if (wRes.ok) {
+                  const wData = await wRes.json();
+                  if (wData.description) {
+                    olDesc = typeof wData.description === "string" ? wData.description : wData.description?.value ?? null;
+                  }
+                }
+              }
+            }
+          }
+          if (olDesc) {
+            // Cache it in the DB for future use
+            const dbInstance = await db.getDb();
+            if (dbInstance) {
+              const { books: booksTable } = await import("../drizzle/schema");
+              const { eq } = await import("drizzle-orm");
+              await dbInstance.update(booksTable).set({ description: olDesc }).where(eq(booksTable.id, input.bookId));
+            }
+            return { summary: olDesc, source: "openlibrary" as const };
+          }
+        } catch { /* fall through to LLM */ }
+        // Fallback: generate with LLM
+        try {
+          const { invokeLLM } = await import("./_core/llm");
+          const response = await invokeLLM({
+            messages: [
+              { role: "system", content: "You are a helpful book summary assistant. Provide a concise 2-3 sentence summary of the book. Focus on the premise and genre. Do not include spoilers." },
+              { role: "user", content: `Summarize the book "${book.title}" by ${book.author}.` },
+            ],
+          });
+          const rawContent = response.choices?.[0]?.message?.content ?? null;
+          const summary = typeof rawContent === "string" ? rawContent : null;
+          if (summary) {
+            const dbInstance = await db.getDb();
+            if (dbInstance) {
+              const { books: booksTable } = await import("../drizzle/schema");
+              const { eq } = await import("drizzle-orm");
+              await dbInstance.update(booksTable).set({ description: summary }).where(eq(booksTable.id, input.bookId));
+            }
+            return { summary, source: "llm" as const };
+          }
+        } catch { /* ignore LLM errors */ }
+        return { summary: null, source: "none" as const };
+      }),
   }),
 
   // ─── Open Library Search ──────────────────────────────────────

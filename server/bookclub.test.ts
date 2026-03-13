@@ -141,7 +141,7 @@ vi.mock("./db", () => {
     getEventSubmissions: vi.fn().mockImplementation(async (eventId) => {
       return submissions.filter((s) => s.eventId === eventId).map((s) => {
         const book = books.find((b) => b.id === s.bookId);
-        return { ...s, bookTitle: book?.title ?? "Unknown", bookAuthor: book?.author ?? "Unknown", bookGenre: book?.genre, bookPageCount: book?.pageCount, bookRating: book?.rating, bookCoverUrl: null, submitterName: "Test User" };
+        return { ...s, bookTitle: book?.title ?? "Unknown", bookAuthor: book?.author ?? "Unknown", bookGenre: book?.genre, bookPageCount: book?.pageCount, bookRating: book?.rating, bookCoverUrl: null, bookDescription: book?.description ?? null, bookIsbn: book?.isbn ?? null, submitterName: "Test User" };
       });
     }),
     getUserSubmissionForEvent: vi.fn().mockImplementation(async (eventId, userId) => submissions.find((s) => s.eventId === eventId && s.submittedBy === userId)),
@@ -1479,5 +1479,51 @@ describe("invitations.accept improvements", () => {
     const result = await caller.invitations.verify({ token: "expired-token-xyz" });
     expect(result.valid).toBe(false);
     expect(result.invitation).toBeNull();
+  });
+});
+
+// ─── Book Summary Tests ────────────────────────────────────────────
+describe("books.getSummary", () => {
+  it("returns stored description when book already has one", async () => {
+    const user = createMockUser();
+    const caller = appRouter.createCaller(createCtx(user));
+
+    // Create a book with a description
+    const bookId = (await caller.books.create({
+      groupId: 1,
+      title: "Book With Description",
+      author: "Author A",
+      description: "This is a pre-existing summary of the book.",
+    })).id;
+
+    const result = await caller.books.getSummary({ bookId });
+    expect(result.summary).toBe("This is a pre-existing summary of the book.");
+    expect(result.source).toBe("stored");
+  });
+
+  it("throws NOT_FOUND for non-existent book", async () => {
+    const user = createMockUser();
+    const caller = appRouter.createCaller(createCtx(user));
+
+    await expect(caller.books.getSummary({ bookId: 999999 })).rejects.toThrow("Book not found");
+  });
+
+  it("attempts to fetch summary for book without description", async () => {
+    const user = createMockUser();
+    const caller = appRouter.createCaller(createCtx(user));
+
+    // Create a book without description
+    const bookId = (await caller.books.create({
+      groupId: 1,
+      title: "Book Without Description",
+      author: "Author B",
+    })).id;
+
+    // This will try Open Library and LLM, both may fail in test env
+    // but should not throw - should return gracefully
+    const result = await caller.books.getSummary({ bookId });
+    // Result should have a summary (from OL or LLM) or null
+    expect(result).toHaveProperty("summary");
+    expect(result).toHaveProperty("source");
   });
 });

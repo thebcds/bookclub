@@ -24,7 +24,10 @@ import {
   BookMarked,
   BookOpen,
   Check,
+  ChevronDown,
+  ChevronUp,
   Crown,
+  ExternalLink,
   EyeOff,
   Loader2,
   MoreHorizontal,
@@ -53,6 +56,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import { useLocation, useParams } from "wouter";
@@ -668,46 +672,13 @@ function SubmissionsTab({
       {subs.length > 0 ? (
         <div className="grid gap-3">
           {subs.map((sub) => (
-            <Card key={sub.id}>
-              <CardContent className="p-4 flex items-center gap-4">
-                {sub.bookCoverUrl ? (
-                  <img
-                    src={sub.bookCoverUrl}
-                    alt={sub.bookTitle}
-                    className="h-16 w-12 rounded object-cover shadow-sm shrink-0"
-                    onError={(e) => {
-                      const el = e.target as HTMLImageElement;
-                      el.style.display = "none";
-                      el.nextElementSibling?.classList.remove("hidden");
-                    }}
-                  />
-                ) : null}
-                <div className={`h-16 w-12 rounded bg-primary/10 flex items-center justify-center shrink-0 ${sub.bookCoverUrl ? "hidden" : ""}`}>
-                  <BookOpen className="h-6 w-6 text-primary" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold truncate">{sub.bookTitle}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {sub.bookAuthor}
-                    {sub.bookGenre && ` · ${sub.bookGenre}`}
-                    {sub.bookPageCount && ` · ${sub.bookPageCount} pages`}
-                  </p>
-                </div>
-                {!event.anonymousSubmissions && sub.submitterName && (
-                  <p className="text-xs text-muted-foreground shrink-0">
-                    by {sub.submitterName}
-                  </p>
-                )}
-                {event.status === "submissions_open" && event.createdBy === currentUserId && (
-                  <RemoveSubmissionButton
-                    groupId={event.groupId}
-                    eventId={eventId}
-                    submissionId={sub.id}
-                    bookTitle={sub.bookTitle}
-                  />
-                )}
-              </CardContent>
-            </Card>
+            <SubmissionCard
+              key={sub.id}
+              sub={sub}
+              event={event}
+              eventId={eventId}
+              currentUserId={currentUserId}
+            />
           ))}
         </div>
       ) : (
@@ -717,6 +688,110 @@ function SubmissionsTab({
         </div>
       )}
     </div>
+  );
+}
+
+function SubmissionCard({ sub, event, eventId, currentUserId }: { sub: any; event: any; eventId: number; currentUserId?: number }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const { data: summaryData, isLoading: summaryLoading } = trpc.books.getSummary.useQuery(
+    { bookId: sub.bookId },
+    { enabled: isOpen }
+  );
+
+  const openLibraryUrl = sub.bookIsbn
+    ? `https://openlibrary.org/isbn/${sub.bookIsbn}`
+    : `https://openlibrary.org/search?q=${encodeURIComponent(`${sub.bookTitle} ${sub.bookAuthor}`)}`;
+
+  return (
+    <Card>
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4">
+            {sub.bookCoverUrl ? (
+              <img
+                src={sub.bookCoverUrl}
+                alt={sub.bookTitle}
+                className="h-16 w-12 rounded object-cover shadow-sm shrink-0"
+                onError={(e) => {
+                  const el = e.target as HTMLImageElement;
+                  el.style.display = "none";
+                  el.nextElementSibling?.classList.remove("hidden");
+                }}
+              />
+            ) : null}
+            <div className={`h-16 w-12 rounded bg-primary/10 flex items-center justify-center shrink-0 ${sub.bookCoverUrl ? "hidden" : ""}`}>
+              <BookOpen className="h-6 w-6 text-primary" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <a
+                  href={openLibraryUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold truncate hover:underline text-foreground"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {sub.bookTitle}
+                </a>
+                <a
+                  href={openLibraryUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {sub.bookAuthor}
+                {sub.bookGenre && ` · ${sub.bookGenre}`}
+                {sub.bookPageCount && ` · ${sub.bookPageCount} pages`}
+              </p>
+            </div>
+            {!event.anonymousSubmissions && sub.submitterName && (
+              <p className="text-xs text-muted-foreground shrink-0">
+                by {sub.submitterName}
+              </p>
+            )}
+            {event.status === "submissions_open" && event.createdBy === currentUserId && (
+              <RemoveSubmissionButton
+                groupId={event.groupId}
+                eventId={eventId}
+                submissionId={sub.id}
+                bookTitle={sub.bookTitle}
+              />
+            )}
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="shrink-0 h-8 w-8 p-0">
+                {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </Button>
+            </CollapsibleTrigger>
+          </div>
+          <CollapsibleContent>
+            <div className="mt-3 pt-3 border-t">
+              {sub.bookDescription ? (
+                <p className="text-sm text-muted-foreground leading-relaxed">{sub.bookDescription}</p>
+              ) : summaryLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Fetching summary...
+                </div>
+              ) : summaryData?.summary ? (
+                <p className="text-sm text-muted-foreground leading-relaxed">{summaryData.summary}</p>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">No summary available for this book.</p>
+              )}
+              {summaryData?.source && summaryData.source !== "none" && !sub.bookDescription && (
+                <p className="text-xs text-muted-foreground/60 mt-1.5">
+                  Source: {summaryData.source === "openlibrary" ? "Open Library" : summaryData.source === "stored" ? "Saved" : "AI-generated"}
+                </p>
+              )}
+            </div>
+          </CollapsibleContent>
+        </CardContent>
+      </Collapsible>
+    </Card>
   );
 }
 

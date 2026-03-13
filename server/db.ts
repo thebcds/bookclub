@@ -371,6 +371,7 @@ export async function getEventSubmissions(eventId: number) {
       id: submissions.id, eventId: submissions.eventId, bookId: submissions.bookId, submittedBy: submissions.submittedBy,
       isAnonymous: submissions.isAnonymous, createdAt: submissions.createdAt, bookTitle: books.title, bookAuthor: books.author,
       bookCoverUrl: books.coverUrl, bookPageCount: books.pageCount, bookGenre: books.genre, bookRating: books.rating,
+      bookDescription: books.description, bookIsbn: books.isbn,
       submitterName: users.name,
     })
     .from(submissions)
