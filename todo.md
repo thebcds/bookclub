@@ -264,3 +264,18 @@
 - [x] Frontend: add admin vote adjustment UI with change/remove actions (all schemes)
 - [x] Applied to all voting schemes: simple majority, ranked choice, tournament bracket
 - [x] Write tests for vote undo and admin vote adjustment (111 of 112 passing, 1 pre-existing timeout)
+
+## Book Summaries in Voting View (v5.8)
+- [ ] Add expandable book summaries to simple majority voting view book cards
+- [ ] Add expandable book summaries to ranked choice voting view book cards
+- [ ] Add expandable book summaries to tournament bracket matchup cards
+- [ ] Reuse the existing SubmissionCard/summary pattern from SubmissionsTab
+
+## Voting Deadline Countdown Timer (v5.8)
+- [x] Create a reusable CountdownTimer component with live updating (days/hours/minutes/seconds)
+- [x] Show countdown timer on voting tab when votingDeadline is set and event is in voting status
+- [x] Show expired/ended state when deadline has passed
+- [x] Urgent styling (red) when less than 24 hours remain
+- [x] Also show countdown for submission deadline on submissions tab
+- [x] Compact mode available for inline display
+- [x] All 112 tests pass

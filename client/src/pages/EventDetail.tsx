@@ -70,7 +70,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import CountdownTimer from "@/components/CountdownTimer";
 import { toast } from "sonner";
 import { useLocation, useParams } from "wouter";
 
@@ -424,6 +425,11 @@ export default function EventDetailPage() {
         </TabsList>
 
         <TabsContent value="submissions" className="mt-4">
+          {event.status === "submissions_open" && event.submissionDeadline && (
+            <div className="mb-4">
+              <CountdownTimer deadline={event.submissionDeadline} label="Submissions close in" />
+            </div>
+          )}
           <SubmissionsTab
             eventId={eventId}
             event={event}
@@ -434,9 +440,14 @@ export default function EventDetailPage() {
         </TabsContent>
 
         <TabsContent value="voting" className="mt-4">
-          {event.status === "voting" && event.createdBy === user?.id && (
-            <VotingReminderButton groupId={gid!} eventId={eventId} />
-          )}
+          <div className="flex flex-col gap-3 mb-4">
+            {event.status === "voting" && event.votingDeadline && (
+              <CountdownTimer deadline={event.votingDeadline} label="Voting ends in" />
+            )}
+            {event.status === "voting" && event.createdBy === user?.id && (
+              <VotingReminderButton groupId={gid!} eventId={eventId} />
+            )}
+          </div>
           {event.votingScheme === "tournament" ? (
             <BracketTree
               eventId={eventId}
