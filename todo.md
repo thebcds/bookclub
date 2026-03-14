@@ -279,3 +279,10 @@
 - [x] Also show countdown for submission deadline on submissions tab
 - [x] Compact mode available for inline display
 - [x] All 112 tests pass
+
+## Bracket View: Show Participation Not Tallies (v5.9)
+- [x] During voting: hide per-book vote counts, show "X of Y voted" participation indicator on each matchup
+- [x] Each member can still see which book they voted for (highlighted with ring)
+- [x] After matchup resolved: show per-book tallies alongside the winner
+- [x] Total group member count passed from EventDetail via members.list query
+- [x] All 112 tests pass

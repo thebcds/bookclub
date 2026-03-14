@@ -99,6 +99,7 @@ export default function EventDetailPage() {
     { enabled: event?.votingScheme !== "tournament" }
   );
 
+
   const startVoting = trpc.events.startVoting.useMutation({
     onSuccess: () => {
       toast.success("Voting started! Notifications sent.");
@@ -118,6 +119,10 @@ export default function EventDetailPage() {
   });
 
   const gid = activeGroup?.id;
+  const { data: membersList } = trpc.members.list.useQuery(
+    { groupId: gid! },
+    { enabled: !!gid }
+  );
   const [showEditDialog, setShowEditDialog] = useState(false);
 
   const updateEvent = trpc.events.update.useMutation({
@@ -457,6 +462,7 @@ export default function EventDetailPage() {
               isAdmin={isGroupAdmin}
               anonymousVoting={event.anonymousVoting}
               hideTalliesUntilComplete={event.hideTalliesUntilComplete}
+              totalMembers={membersList?.length ?? 0}
             />
           ) : (
             <VotingView

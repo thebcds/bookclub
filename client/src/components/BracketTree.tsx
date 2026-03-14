@@ -40,9 +40,10 @@ type Props = {
   isAdmin: boolean;
   anonymousVoting?: boolean;
   hideTalliesUntilComplete?: boolean;
+  totalMembers?: number;
 };
 
-export default function BracketTree({ eventId, groupId, brackets, eventStatus, isAdmin, anonymousVoting, hideTalliesUntilComplete }: Props) {
+export default function BracketTree({ eventId, groupId, brackets, eventStatus, isAdmin, anonymousVoting, hideTalliesUntilComplete, totalMembers = 0 }: Props) {
   const utils = trpc.useUtils();
 
   const voteMutation = trpc.brackets.vote.useMutation({
@@ -122,6 +123,7 @@ export default function BracketTree({ eventId, groupId, brackets, eventStatus, i
                   isAdmin={isAdmin}
                   anonymousVoting={anonymousVoting}
                   hideTalliesUntilComplete={hideTalliesUntilComplete}
+                  totalMembers={totalMembers}
                   onVote={(bracketId, bookId) =>
                     voteMutation.mutate({ bracketId, bookId, eventId })
                   }
@@ -154,6 +156,7 @@ export default function BracketTree({ eventId, groupId, brackets, eventStatus, i
               isAdmin={isAdmin}
               anonymousVoting={anonymousVoting}
               hideTalliesUntilComplete={hideTalliesUntilComplete}
+              totalMembers={totalMembers}
               isFinal
               onVote={(bookId) =>
                 voteMutation.mutate({ bracketId: finalMatch.id, bookId, eventId })
@@ -191,6 +194,7 @@ export default function BracketTree({ eventId, groupId, brackets, eventStatus, i
                   isAdmin={isAdmin}
                   anonymousVoting={anonymousVoting}
                   hideTalliesUntilComplete={hideTalliesUntilComplete}
+                  totalMembers={totalMembers}
                   onVote={(bracketId, bookId) =>
                     voteMutation.mutate({ bracketId, bookId, eventId })
                   }
@@ -220,6 +224,7 @@ function RoundColumn({
   isAdmin,
   anonymousVoting,
   hideTalliesUntilComplete,
+  totalMembers,
   onVote,
   onResolve,
   isVoting,
@@ -234,6 +239,7 @@ function RoundColumn({
   isAdmin: boolean;
   anonymousVoting?: boolean;
   hideTalliesUntilComplete?: boolean;
+  totalMembers?: number;
   onVote: (bracketId: number, bookId: number) => void;
   onResolve: (bracketId: number) => void;
   isVoting: boolean;
@@ -253,7 +259,7 @@ function RoundColumn({
       </h4>
       <div className="flex flex-col justify-around flex-1 gap-4">
         {matches.map((match) => (
-          <MatchNode
+            <MatchNode
             key={match.id}
             match={match}
             eventId={eventId}
@@ -262,6 +268,7 @@ function RoundColumn({
             isAdmin={isAdmin}
             anonymousVoting={anonymousVoting}
             hideTalliesUntilComplete={hideTalliesUntilComplete}
+            totalMembers={totalMembers}
             onVote={(bookId) => onVote(match.id, bookId)}
             onResolve={() => onResolve(match.id)}
             isVoting={isVoting}
@@ -281,6 +288,7 @@ function MatchNode({
   isAdmin,
   anonymousVoting,
   hideTalliesUntilComplete,
+  totalMembers = 0,
   isFinal,
   onVote,
   onResolve,
@@ -294,6 +302,7 @@ function MatchNode({
   isAdmin: boolean;
   anonymousVoting?: boolean;
   hideTalliesUntilComplete?: boolean;
+  totalMembers?: number;
   isFinal?: boolean;
   onVote: (bookId: number) => void;
   onResolve: () => void;
@@ -333,11 +342,14 @@ function MatchNode({
 
   const book1Votes = votes?.filter((v) => v.bookId === match.book1Id).length ?? 0;
   const book2Votes = votes?.filter((v) => v.bookId === match.book2Id).length ?? 0;
+  const totalVotesCast = (votes?.length ?? 0);
   const canVote = match.status === "voting" && !myVote && eventStatus === "voting";
   const canUndo = myVote && match.status === "voting" && !match.winnerId;
 
-  // Should we hide tallies? Only hide when match is not yet completed and the option is enabled
-  const shouldHideTallies = hideTalliesUntilComplete && match.status !== "completed";
+  // Per-book tallies: only show after matchup is resolved
+  // During voting: show participation indicator ("X of Y voted") instead
+  const isResolved = match.status === "completed";
+  const showPerBookTallies = isResolved;
 
   const borderClass = isFinal
     ? "border-2 border-amber-400/50 shadow-lg shadow-amber-100/50"
@@ -366,15 +378,21 @@ function MatchNode({
         seed={match.book1Seed}
         isWinner={match.winnerId === match.book1Id}
         isMyVote={myVote?.bookId === match.book1Id}
-        voteCount={shouldHideTallies ? undefined : (match.status !== "pending" ? book1Votes : undefined)}
+        voteCount={showPerBookTallies ? book1Votes : undefined}
         canVote={canVote}
         onVote={() => match.book1Id && setConfirmBookId(match.book1Id)}
       />
 
-      {/* VS divider */}
+      {/* VS divider with participation indicator */}
       <div className="flex items-center gap-2 px-3">
         <div className="flex-1 h-px bg-border" />
-        <span className="text-[10px] font-bold text-muted-foreground tracking-widest">VS</span>
+        {match.status === "voting" ? (
+          <span className="text-[10px] font-medium text-muted-foreground whitespace-nowrap">
+            {totalVotesCast} of {totalMembers} voted
+          </span>
+        ) : (
+          <span className="text-[10px] font-bold text-muted-foreground tracking-widest">VS</span>
+        )}
         <div className="flex-1 h-px bg-border" />
       </div>
 
@@ -384,7 +402,7 @@ function MatchNode({
         seed={match.book2Seed}
         isWinner={match.winnerId === match.book2Id}
         isMyVote={myVote?.bookId === match.book2Id}
-        voteCount={shouldHideTallies ? undefined : (match.status !== "pending" ? book2Votes : undefined)}
+        voteCount={showPerBookTallies ? book2Votes : undefined}
         canVote={canVote}
         onVote={() => match.book2Id && setConfirmBookId(match.book2Id)}
       />
