@@ -1,9 +1,19 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { trpc } from "@/lib/trpc";
-import { Crown, Loader2, Trophy } from "lucide-react";
-import { useMemo } from "react";
+import { Crown, Loader2, Trophy, Undo2 } from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 type BracketMatch = {
@@ -107,6 +117,7 @@ export default function BracketTree({ eventId, groupId, brackets, eventStatus, i
                   maxRound={maxRound}
                   matches={roundMatches}
                   eventId={eventId}
+                  groupId={groupId}
                   eventStatus={eventStatus}
                   isAdmin={isAdmin}
                   anonymousVoting={anonymousVoting}
@@ -138,6 +149,7 @@ export default function BracketTree({ eventId, groupId, brackets, eventStatus, i
             <MatchNode
               match={finalMatch}
               eventId={eventId}
+              groupId={groupId}
               eventStatus={eventStatus}
               isAdmin={isAdmin}
               anonymousVoting={anonymousVoting}
@@ -174,6 +186,7 @@ export default function BracketTree({ eventId, groupId, brackets, eventStatus, i
                   maxRound={maxRound}
                   matches={roundMatches}
                   eventId={eventId}
+                  groupId={groupId}
                   eventStatus={eventStatus}
                   isAdmin={isAdmin}
                   anonymousVoting={anonymousVoting}
@@ -202,6 +215,7 @@ function RoundColumn({
   maxRound,
   matches,
   eventId,
+  groupId,
   eventStatus,
   isAdmin,
   anonymousVoting,
@@ -215,6 +229,7 @@ function RoundColumn({
   maxRound: number;
   matches: BracketMatch[];
   eventId: number;
+  groupId: number;
   eventStatus: string;
   isAdmin: boolean;
   anonymousVoting?: boolean;
@@ -242,6 +257,7 @@ function RoundColumn({
             key={match.id}
             match={match}
             eventId={eventId}
+            groupId={groupId}
             eventStatus={eventStatus}
             isAdmin={isAdmin}
             anonymousVoting={anonymousVoting}
@@ -260,6 +276,7 @@ function RoundColumn({
 function MatchNode({
   match,
   eventId,
+  groupId,
   eventStatus,
   isAdmin,
   anonymousVoting,
@@ -272,6 +289,7 @@ function MatchNode({
 }: {
   match: BracketMatch;
   eventId: number;
+  groupId: number;
   eventStatus: string;
   isAdmin: boolean;
   anonymousVoting?: boolean;
@@ -282,6 +300,9 @@ function MatchNode({
   isVoting: boolean;
   isResolving: boolean;
 }) {
+  const utils = trpc.useUtils();
+  const [confirmBookId, setConfirmBookId] = useState<number | null>(null);
+
   const { data: myVote } = trpc.brackets.myVote.useQuery(
     { bracketId: match.id },
     { enabled: match.status === "voting" }
@@ -291,9 +312,29 @@ function MatchNode({
     { enabled: match.status !== "pending" }
   );
 
+  const undoVote = trpc.brackets.undoVote.useMutation({
+    onSuccess: () => {
+      toast.success("Vote retracted");
+      utils.brackets.myVote.invalidate({ bracketId: match.id });
+      utils.brackets.getVotes.invalidate({ bracketId: match.id, eventId });
+      utils.brackets.getForEvent.invalidate({ eventId });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const adminAdjust = trpc.brackets.adminAdjustVote.useMutation({
+    onSuccess: () => {
+      toast.success("Vote adjusted");
+      utils.brackets.getVotes.invalidate({ bracketId: match.id, eventId });
+      utils.brackets.getForEvent.invalidate({ eventId });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const book1Votes = votes?.filter((v) => v.bookId === match.book1Id).length ?? 0;
   const book2Votes = votes?.filter((v) => v.bookId === match.book2Id).length ?? 0;
   const canVote = match.status === "voting" && !myVote && eventStatus === "voting";
+  const canUndo = myVote && match.status === "voting" && !match.winnerId;
 
   // Should we hide tallies? Only hide when match is not yet completed and the option is enabled
   const shouldHideTallies = hideTalliesUntilComplete && match.status !== "completed";
@@ -305,6 +346,8 @@ function MatchNode({
       : match.status === "completed"
         ? "border-muted opacity-80"
         : "border-border";
+
+  const confirmBook = confirmBookId === match.book1Id ? match.book1 : confirmBookId === match.book2Id ? match.book2 : null;
 
   return (
     <div className={`rounded-xl border bg-card text-card-foreground overflow-hidden ${borderClass}`}>
@@ -325,7 +368,7 @@ function MatchNode({
         isMyVote={myVote?.bookId === match.book1Id}
         voteCount={shouldHideTallies ? undefined : (match.status !== "pending" ? book1Votes : undefined)}
         canVote={canVote}
-        onVote={() => match.book1Id && onVote(match.book1Id)}
+        onVote={() => match.book1Id && setConfirmBookId(match.book1Id)}
       />
 
       {/* VS divider */}
@@ -343,8 +386,24 @@ function MatchNode({
         isMyVote={myVote?.bookId === match.book2Id}
         voteCount={shouldHideTallies ? undefined : (match.status !== "pending" ? book2Votes : undefined)}
         canVote={canVote}
-        onVote={() => match.book2Id && onVote(match.book2Id)}
+        onVote={() => match.book2Id && setConfirmBookId(match.book2Id)}
       />
+
+      {/* Undo vote button */}
+      {canUndo && (
+        <div className="px-2 pb-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full text-xs h-7 gap-1"
+            onClick={() => undoVote.mutate({ bracketId: match.id, eventId })}
+            disabled={undoVote.isPending}
+          >
+            {undoVote.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Undo2 className="h-3 w-3" />}
+            Undo Vote
+          </Button>
+        </div>
+      )}
 
       {/* Admin resolve button */}
       {isAdmin && match.status === "voting" && eventStatus === "voting" && (
@@ -365,6 +424,30 @@ function MatchNode({
           </Button>
         </div>
       )}
+
+      {/* Vote confirmation dialog */}
+      <AlertDialog open={confirmBookId !== null} onOpenChange={(open) => !open && setConfirmBookId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm your vote</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are voting for <strong>{confirmBook?.title ?? "this book"}</strong> by {confirmBook?.author ?? "unknown author"}. Are you sure?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (confirmBookId) onVote(confirmBookId);
+                setConfirmBookId(null);
+              }}
+              disabled={isVoting}
+            >
+              {isVoting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm Vote"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

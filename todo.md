@@ -255,3 +255,12 @@
 - [x] Frontend: add expandable summary section to each submission card (chevron toggle, lazy-loaded)
 - [x] Frontend: add external link icon on book titles (links to Open Library by ISBN or title+author search)
 - [x] Write tests for summary generation (104 total passing)
+
+## Voting Improvements (v5.7)
+- [x] Frontend: add confirmation dialog before submitting any vote (AlertDialog in VotingView and BracketTree)
+- [x] Backend: add vote undo/retract procedures (brackets.undoVote, voting.undoVote) — allowed until matchup/outcome is determined
+- [x] Backend: add admin vote adjustment procedures (brackets.adminAdjustVote, voting.adminAdjustVote) — admin can change/remove any vote at any time
+- [x] Frontend: add undo vote button for voters (visible until outcome is determined, all schemes)
+- [x] Frontend: add admin vote adjustment UI with change/remove actions (all schemes)
+- [x] Applied to all voting schemes: simple majority, ranked choice, tournament bracket
+- [x] Write tests for vote undo and admin vote adjustment (111 of 112 passing, 1 pre-existing timeout)

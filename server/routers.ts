@@ -647,6 +647,37 @@ export const appRouter = router({
       .query(async ({ ctx, input }) => {
         return db.getUserVoteForBracket(input.bracketId, ctx.user.id) ?? null;
       }),
+    undoVote: protectedProcedure
+      .input(z.object({ bracketId: z.number(), eventId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        // Check that the matchup hasn't been resolved yet
+        const bracketList = await db.getEventBrackets(input.eventId);
+        const bracket = bracketList.find((b) => b.id === input.bracketId);
+        if (!bracket) throw new TRPCError({ code: "NOT_FOUND", message: "Matchup not found" });
+        if (bracket.winnerId) throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot undo vote after matchup has been resolved" });
+        const existing = await db.getUserVoteForBracket(input.bracketId, ctx.user.id);
+        if (!existing) throw new TRPCError({ code: "BAD_REQUEST", message: "You haven't voted on this matchup" });
+        await db.deleteUserVoteForBracket(input.bracketId, ctx.user.id);
+        return { success: true };
+      }),
+    adminAdjustVote: protectedProcedure
+      .input(z.object({ groupId: z.number(), bracketId: z.number(), eventId: z.number(), userId: z.number(), bookId: z.number().optional(), action: z.enum(["change", "remove"]) }))
+      .mutation(async ({ ctx, input }) => {
+        await requireGroupAdmin(ctx.user.id, input.groupId);
+        if (input.action === "remove") {
+          await db.deleteUserVoteForBracket(input.bracketId, input.userId);
+          return { success: true };
+        }
+        // Change vote
+        if (!input.bookId) throw new TRPCError({ code: "BAD_REQUEST", message: "bookId required for change action" });
+        const existing = await db.getUserVoteForBracket(input.bracketId, input.userId);
+        if (existing) {
+          await db.updateVoteChoice(existing.id, input.bookId);
+        } else {
+          await db.castVote({ eventId: input.eventId, bracketId: input.bracketId, userId: input.userId, bookId: input.bookId });
+        }
+        return { success: true };
+      }),
     resolveMatch: protectedProcedure
       .input(z.object({ groupId: z.number(), bracketId: z.number(), eventId: z.number() }))
       .mutation(async ({ ctx, input }) => {
@@ -756,6 +787,47 @@ export const appRouter = router({
       .input(z.object({ eventId: z.number() }))
       .query(async ({ ctx, input }) => {
         return db.getUserVoteForEvent(input.eventId, ctx.user.id) ?? null;
+      }),
+    undoVote: protectedProcedure
+      .input(z.object({ eventId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const event = await db.getEventById(input.eventId);
+        if (!event) throw new TRPCError({ code: "NOT_FOUND" });
+        if (event.status !== "voting") throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot undo vote when voting is not active" });
+        if (event.winningBookId) throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot undo vote after results have been determined" });
+        const existing = await db.getUserVoteForEvent(input.eventId, ctx.user.id);
+        if (!existing) throw new TRPCError({ code: "BAD_REQUEST", message: "You haven't voted yet" });
+        await db.deleteUserVoteForEvent(input.eventId, ctx.user.id);
+        return { success: true };
+      }),
+    adminAdjustVote: protectedProcedure
+      .input(z.object({ groupId: z.number(), eventId: z.number(), userId: z.number(), bookId: z.number().optional(), rankings: z.array(z.number()).optional(), action: z.enum(["change", "remove"]) }))
+      .mutation(async ({ ctx, input }) => {
+        await requireGroupAdmin(ctx.user.id, input.groupId);
+        const event = await db.getEventById(input.eventId);
+        if (!event) throw new TRPCError({ code: "NOT_FOUND" });
+        if (input.action === "remove") {
+          await db.deleteUserVoteForEvent(input.eventId, input.userId);
+          return { success: true };
+        }
+        // Change vote
+        const existing = await db.getUserVoteForEvent(input.eventId, input.userId);
+        if (event.votingScheme === "ranked_choice") {
+          if (!input.rankings) throw new TRPCError({ code: "BAD_REQUEST", message: "rankings required for ranked choice" });
+          if (existing) {
+            await db.updateVoteChoice(existing.id, input.rankings[0], input.rankings);
+          } else {
+            await db.castVote({ eventId: input.eventId, userId: input.userId, bookId: input.rankings[0], rankings: input.rankings });
+          }
+        } else {
+          if (!input.bookId) throw new TRPCError({ code: "BAD_REQUEST", message: "bookId required for change action" });
+          if (existing) {
+            await db.updateVoteChoice(existing.id, input.bookId);
+          } else {
+            await db.castVote({ eventId: input.eventId, userId: input.userId, bookId: input.bookId });
+          }
+        }
+        return { success: true };
       }),
     resolve: protectedProcedure
       .input(z.object({ groupId: z.number(), eventId: z.number() }))

@@ -717,3 +717,37 @@ export async function getEventVoterIds(eventId: number): Promise<number[]> {
     .groupBy(votes.userId);
   return rows.map(r => r.userId);
 }
+
+// ─── Vote Undo / Admin Adjustment ──────────────────────────────────
+export async function deleteVoteById(voteId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.delete(votes).where(eq(votes.id, voteId));
+}
+
+export async function deleteUserVoteForEvent(eventId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.delete(votes).where(and(eq(votes.eventId, eventId), eq(votes.userId, userId), isNull(votes.bracketId)));
+}
+
+export async function deleteUserVoteForBracket(bracketId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.delete(votes).where(and(eq(votes.bracketId, bracketId), eq(votes.userId, userId)));
+}
+
+export async function updateVoteChoice(voteId: number, newBookId: number, newRankings?: number[] | null) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const updateData: { bookId: number; rankings?: any } = { bookId: newBookId };
+  if (newRankings !== undefined) updateData.rankings = newRankings;
+  await db.update(votes).set(updateData).where(eq(votes.id, voteId));
+}
+
+export async function getVoteById(voteId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(votes).where(eq(votes.id, voteId)).limit(1);
+  return result[0] ?? null;
+}

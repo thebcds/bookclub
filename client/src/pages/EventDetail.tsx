@@ -4,6 +4,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -35,8 +46,10 @@ import {
   Plus,
   RotateCcw,
   Settings2,
+  Shield,
   Trash2,
   Trophy,
+  Undo2,
   Vote,
   X,
   Bell,
@@ -1212,6 +1225,10 @@ function VotingView({
 }) {
   const utils = trpc.useUtils();
   const [rankedOrder, setRankedOrder] = useState<number[]>([]);
+  const [pendingVoteBookId, setPendingVoteBookId] = useState<number | null>(null);
+  const [showAdminAdjust, setShowAdminAdjust] = useState(false);
+  const isAdmin = currentUserId === event.createdBy;
+  const canUndo = myVote && event.status === "voting" && !event.winningBookId;
 
   const castSimple = trpc.voting.castSimple.useMutation({
     onSuccess: () => {
@@ -1231,27 +1248,64 @@ function VotingView({
     onError: (err) => toast.error(err.message),
   });
 
+  const undoVote = trpc.voting.undoVote.useMutation({
+    onSuccess: () => {
+      toast.success("Vote retracted");
+      utils.voting.myVote.invalidate({ eventId });
+      utils.voting.getResults.invalidate({ eventId });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const adminAdjust = trpc.voting.adminAdjustVote.useMutation({
+    onSuccess: () => {
+      toast.success("Vote adjusted");
+      utils.voting.getResults.invalidate({ eventId });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const canVote = event.status === "voting" && !myVote;
 
   if (event.votingScheme === "simple_majority") {
     return (
       <div className="space-y-4">
         {myVote && (
-          <p className="text-sm text-muted-foreground flex items-center gap-2">
-            <Check className="h-4 w-4 text-emerald-600" />
-            You&apos;ve cast your vote.
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-muted-foreground flex items-center gap-2">
+              <Check className="h-4 w-4 text-emerald-600" />
+              You&apos;ve cast your vote{subs.find((s: any) => s.bookId === myVote.bookId) ? ` for "${subs.find((s: any) => s.bookId === myVote.bookId)?.bookTitle}"` : ""}.
+            </p>
+            {canUndo && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-1">
+                    <Undo2 className="h-3.5 w-3.5" /> Undo Vote
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Undo your vote?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will retract your vote and allow you to vote again.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => undoVote.mutate({ eventId })} disabled={undoVote.isPending}>
+                      {undoVote.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Undo Vote"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
         )}
         <div className="grid gap-3">
           {subs.map((sub) => (
             <Card
               key={sub.id}
-              className={`${canVote ? "cursor-pointer hover:shadow-md" : ""} ${
-                myVote?.bookId === sub.bookId ? "border-primary" : ""
-              }`}
-              onClick={() =>
-                canVote && castSimple.mutate({ eventId, bookId: sub.bookId })
-              }
+              className={`${myVote?.bookId === sub.bookId ? "border-primary" : ""}`}
             >
               <CardContent className="p-4 flex items-center gap-4">
                 {sub.bookCoverUrl ? (
@@ -1281,14 +1335,43 @@ function VotingView({
                   </div>
                 )}
                 {canVote && (
-                  <Button variant="outline" size="sm" disabled={castSimple.isPending}>
-                    Vote
-                  </Button>
+                  <AlertDialog open={pendingVoteBookId === sub.bookId} onOpenChange={(open) => !open && setPendingVoteBookId(null)}>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" size="sm" disabled={castSimple.isPending} onClick={() => setPendingVoteBookId(sub.bookId)}>
+                        Vote
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Confirm your vote</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          You are voting for <strong>{sub.bookTitle}</strong> by {sub.bookAuthor}. Are you sure?
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => { castSimple.mutate({ eventId, bookId: sub.bookId }); setPendingVoteBookId(null); }} disabled={castSimple.isPending}>
+                          {castSimple.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm Vote"}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 )}
               </CardContent>
             </Card>
           ))}
         </div>
+        {isAdmin && (
+          <AdminVoteAdjuster
+            eventId={eventId}
+            groupId={groupId}
+            subs={subs}
+            scheme="simple_majority"
+            adminAdjust={adminAdjust}
+            show={showAdminAdjust}
+            setShow={setShowAdminAdjust}
+          />
+        )}
       </div>
     );
   }
@@ -1297,10 +1380,35 @@ function VotingView({
   return (
     <div className="space-y-4">
       {myVote && (
-        <p className="text-sm text-muted-foreground flex items-center gap-2">
-          <Check className="h-4 w-4 text-emerald-600" />
-          You&apos;ve submitted your rankings.
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-muted-foreground flex items-center gap-2">
+            <Check className="h-4 w-4 text-emerald-600" />
+            You&apos;ve submitted your rankings.
+          </p>
+          {canUndo && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1">
+                  <Undo2 className="h-3.5 w-3.5" /> Undo Vote
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Undo your rankings?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will retract your ranked vote and allow you to submit new rankings.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => undoVote.mutate({ eventId })} disabled={undoVote.isPending}>
+                    {undoVote.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Undo Vote"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
       )}
       {canVote && (
         <div className="space-y-3">
@@ -1368,18 +1476,41 @@ function VotingView({
                   </div>
                 );
               })}
-              <Button
-                className="w-full"
-                disabled={rankedOrder.length === 0 || castRanked.isPending}
-                onClick={() =>
-                  castRanked.mutate({ eventId, rankings: rankedOrder })
-                }
-              >
-                {castRanked.isPending && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                )}
-                Submit Rankings
-              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    className="w-full"
+                    disabled={rankedOrder.length === 0 || castRanked.isPending}
+                  >
+                    {castRanked.isPending && (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    )}
+                    Submit Rankings
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Confirm your rankings</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      <span className="block mb-2">You are submitting the following rankings:</span>
+                      {rankedOrder.map((bookId, idx) => {
+                        const sub = subs.find((s) => s.bookId === bookId);
+                        return (
+                          <span key={bookId} className="block text-sm">
+                            {idx + 1}. {sub?.bookTitle}
+                          </span>
+                        );
+                      })}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => castRanked.mutate({ eventId, rankings: rankedOrder })} disabled={castRanked.isPending}>
+                      {castRanked.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm Rankings"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           )}
         </div>
@@ -1409,6 +1540,104 @@ function VotingView({
             ))
           )}
         </div>
+      )}
+      {isAdmin && (
+        <AdminVoteAdjuster
+          eventId={eventId}
+          groupId={groupId}
+          subs={subs}
+          scheme="ranked_choice"
+          adminAdjust={adminAdjust}
+          show={showAdminAdjust}
+          setShow={setShowAdminAdjust}
+        />
+      )}
+    </div>
+  );
+}
+
+// Admin vote adjustment panel for simple/ranked voting
+function AdminVoteAdjuster({
+  eventId,
+  groupId,
+  subs,
+  scheme,
+  adminAdjust,
+  show,
+  setShow,
+}: {
+  eventId: number;
+  groupId: number;
+  subs: any[];
+  scheme: string;
+  adminAdjust: any;
+  show: boolean;
+  setShow: (v: boolean) => void;
+}) {
+  const [targetUserId, setTargetUserId] = useState("");
+  const [selectedBookId, setSelectedBookId] = useState("");
+  const members = trpc.members.list.useQuery({ groupId });
+
+  return (
+    <div className="border-t pt-4 mt-4">
+      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShow(!show)}>
+        <Shield className="h-4 w-4" /> Admin: Adjust Votes
+      </Button>
+      {show && (
+        <Card className="mt-3">
+          <CardContent className="p-4 space-y-3">
+            <p className="text-sm text-muted-foreground">As admin, you can change or remove any member&apos;s vote.</p>
+            <div className="space-y-2">
+              <Label>Member</Label>
+              <Select value={targetUserId} onValueChange={setTargetUserId}>
+                <SelectTrigger><SelectValue placeholder="Select member" /></SelectTrigger>
+                <SelectContent>
+                  {members.data?.map((m: any) => (
+                    <SelectItem key={m.userId} value={String(m.userId)}>{m.userName || `User ${m.userId}`}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {scheme === "simple_majority" && (
+              <div className="space-y-2">
+                <Label>Change vote to</Label>
+                <Select value={selectedBookId} onValueChange={setSelectedBookId}>
+                  <SelectTrigger><SelectValue placeholder="Select book" /></SelectTrigger>
+                  <SelectContent>
+                    {subs.map((s: any) => (
+                      <SelectItem key={s.bookId} value={String(s.bookId)}>{s.bookTitle}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="flex gap-2">
+              {scheme === "simple_majority" && (
+                <Button
+                  size="sm"
+                  disabled={!targetUserId || !selectedBookId || adminAdjust.isPending}
+                  onClick={() => {
+                    adminAdjust.mutate({ groupId, eventId, userId: Number(targetUserId), bookId: Number(selectedBookId), action: "change" as const });
+                    setTargetUserId(""); setSelectedBookId("");
+                  }}
+                >
+                  Change Vote
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={!targetUserId || adminAdjust.isPending}
+                onClick={() => {
+                  adminAdjust.mutate({ groupId, eventId, userId: Number(targetUserId), action: "remove" as const });
+                  setTargetUserId(""); setSelectedBookId("");
+                }}
+              >
+                Remove Vote
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

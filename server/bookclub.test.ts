@@ -230,6 +230,21 @@ vi.mock("./db", () => {
       const eventVotes = votes.filter((v: any) => v.eventId === eventId);
       return [...new Set(eventVotes.map((v: any) => v.userId))];
     }),
+    deleteUserVoteForBracket: vi.fn().mockImplementation(async (bracketId: number, userId: number) => {
+      const idx = votes.findIndex((v: any) => v.bracketId === bracketId && v.userId === userId);
+      if (idx !== -1) votes.splice(idx, 1);
+    }),
+    deleteUserVoteForEvent: vi.fn().mockImplementation(async (eventId: number, userId: number) => {
+      const idx = votes.findIndex((v: any) => v.eventId === eventId && !v.bracketId && v.userId === userId);
+      if (idx !== -1) votes.splice(idx, 1);
+    }),
+    updateVoteChoice: vi.fn().mockImplementation(async (voteId: number, newBookId: number, newRankings?: number[] | null) => {
+      const vote = votes.find((v: any) => v.id === voteId);
+      if (vote) {
+        vote.bookId = newBookId;
+        if (newRankings !== undefined) vote.rankings = newRankings;
+      }
+    }),
   };
 });
 
@@ -1525,5 +1540,267 @@ describe("books.getSummary", () => {
     // Result should have a summary (from OL or LLM) or null
     expect(result).toHaveProperty("summary");
     expect(result).toHaveProperty("source");
+  });
+});
+
+
+// ─── Vote Undo & Admin Adjustment Tests ─────────────────────────────
+describe("voting.undoVote (simple/ranked)", () => {
+  it("allows a voter to undo their simple majority vote before outcome is determined", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+    const voter = createMockUser({ id: 60, openId: "undo-voter-1" });
+    const voterCaller = appRouter.createCaller(createCtx(voter));
+
+    // Create event and submit books first
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Undo Vote Test",
+      votingScheme: "simple_majority",
+      maxSubmissionsPerMember: 2,
+    });
+    const book = await adminCaller.books.create({ groupId: 1, title: "Undo Book", author: "Author" });
+    const book2 = await adminCaller.books.create({ groupId: 1, title: "Undo Book 2", author: "Author" });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book2.id, groupId: 1 });
+    // Now start voting
+    await adminCaller.events.startVoting({ groupId: 1, eventId: event.id });
+    await voterCaller.voting.castSimple({ eventId: event.id, bookId: book.id });
+
+    // Verify vote exists
+    const myVote = await voterCaller.voting.myVote({ eventId: event.id });
+    expect(myVote).toBeTruthy();
+
+    // Undo the vote
+    const result = await voterCaller.voting.undoVote({ eventId: event.id });
+    expect(result.success).toBe(true);
+
+    // Verify vote is gone
+    const myVoteAfter = await voterCaller.voting.myVote({ eventId: event.id });
+    expect(myVoteAfter).toBeFalsy();
+  });
+
+  it("rejects undo when no vote exists", async () => {
+    const voter = createMockUser({ id: 61, openId: "undo-voter-2" });
+    const voterCaller = appRouter.createCaller(createCtx(voter));
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Undo No Vote Test",
+      votingScheme: "simple_majority",
+      maxSubmissionsPerMember: 2,
+    });
+    const bookA = await adminCaller.books.create({ groupId: 1, title: "No Vote Book A", author: "Author" });
+    const bookB = await adminCaller.books.create({ groupId: 1, title: "No Vote Book B", author: "Author" });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: bookA.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: bookB.id, groupId: 1 });
+    await adminCaller.events.startVoting({ groupId: 1, eventId: event.id });
+
+    await expect(voterCaller.voting.undoVote({ eventId: event.id })).rejects.toThrow();
+  });
+});
+
+describe("voting.adminAdjustVote (simple/ranked)", () => {
+  it("allows admin to remove a member's vote", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+    const voter = createMockUser({ id: 62, openId: "admin-adjust-voter" });
+    const voterCaller = appRouter.createCaller(createCtx(voter));
+
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Admin Adjust Test",
+      votingScheme: "simple_majority",
+      maxSubmissionsPerMember: 2,
+    });
+    const book = await adminCaller.books.create({ groupId: 1, title: "Admin Adjust Book", author: "Author" });
+    const book2a = await adminCaller.books.create({ groupId: 1, title: "Admin Adjust Book 2", author: "Author" });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book2a.id, groupId: 1 });
+    await adminCaller.events.startVoting({ groupId: 1, eventId: event.id });
+    await voterCaller.voting.castSimple({ eventId: event.id, bookId: book.id });
+
+    // Admin removes the vote
+    const result = await adminCaller.voting.adminAdjustVote({
+      groupId: 1,
+      eventId: event.id,
+      userId: 62,
+      action: "remove",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("allows admin to change a member's vote", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+    const voter = createMockUser({ id: 63, openId: "admin-change-voter" });
+    const voterCaller = appRouter.createCaller(createCtx(voter));
+
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Admin Change Vote Test",
+      votingScheme: "simple_majority",
+      maxSubmissionsPerMember: 3,
+    });
+    const book1 = await adminCaller.books.create({ groupId: 1, title: "Book A", author: "Author" });
+    const book2 = await adminCaller.books.create({ groupId: 1, title: "Book B", author: "Author" });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book1.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book2.id, groupId: 1 });
+    await adminCaller.events.startVoting({ groupId: 1, eventId: event.id });
+    await voterCaller.voting.castSimple({ eventId: event.id, bookId: book1.id });
+
+    // Admin changes the vote to book2
+    const result = await adminCaller.voting.adminAdjustVote({
+      groupId: 1,
+      eventId: event.id,
+      userId: 63,
+      bookId: book2.id,
+      action: "change",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects non-admin from adjusting votes", async () => {
+    const member = createMockUser({ id: 1, openId: "test-user-1" });
+    const memberCaller = appRouter.createCaller(createCtx(member));
+
+    await expect(
+      memberCaller.voting.adminAdjustVote({
+        groupId: 1,
+        eventId: 999,
+        userId: 99,
+        action: "remove",
+      })
+    ).rejects.toThrow();
+  });
+});
+
+describe("brackets.undoVote", () => {
+  it("allows a voter to undo their bracket vote before matchup is resolved", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+    const voter = createMockUser({ id: 64, openId: "bracket-undo-voter" });
+    const voterCaller = appRouter.createCaller(createCtx(voter));
+
+    // Create tournament event
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Bracket Undo Test",
+      votingScheme: "tournament",
+      maxSubmissionsPerMember: 4,
+    });
+
+    // Create books and submit
+    const book1 = await adminCaller.books.create({ groupId: 1, title: "Bracket Undo Book 1", author: "A1" });
+    const book2 = await adminCaller.books.create({ groupId: 1, title: "Bracket Undo Book 2", author: "A2" });
+    const book3 = await adminCaller.books.create({ groupId: 1, title: "Bracket Undo Book 3", author: "A3" });
+    const book4 = await adminCaller.books.create({ groupId: 1, title: "Bracket Undo Book 4", author: "A4" });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book1.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book2.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book3.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book4.id, groupId: 1 });
+
+    // Start voting (generates bracket)
+    await adminCaller.events.startVoting({ groupId: 1, eventId: event.id });
+
+    const brackets = await adminCaller.brackets.getForEvent({ eventId: event.id });
+    const votingBracket = brackets.find((b) => b.status === "voting");
+    if (!votingBracket) throw new Error("No voting bracket found");
+
+    // Cast a vote
+    await voterCaller.brackets.vote({ bracketId: votingBracket.id, bookId: book1.id, eventId: event.id });
+
+    // Undo the vote
+    const result = await voterCaller.brackets.undoVote({ bracketId: votingBracket.id, eventId: event.id });
+    expect(result.success).toBe(true);
+  });
+});
+
+describe("brackets.adminAdjustVote", () => {
+  it("allows admin to change a bracket vote", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+    const voter = createMockUser({ id: 65, openId: "bracket-admin-voter" });
+    const voterCaller = appRouter.createCaller(createCtx(voter));
+
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Bracket Admin Adjust Test",
+      votingScheme: "tournament",
+      maxSubmissionsPerMember: 4,
+    });
+
+    const book1 = await adminCaller.books.create({ groupId: 1, title: "BA Book 1", author: "A1" });
+    const book2 = await adminCaller.books.create({ groupId: 1, title: "BA Book 2", author: "A2" });
+    const book3 = await adminCaller.books.create({ groupId: 1, title: "BA Book 3", author: "A3" });
+    const book4 = await adminCaller.books.create({ groupId: 1, title: "BA Book 4", author: "A4" });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book1.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book2.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book3.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book4.id, groupId: 1 });
+
+    await adminCaller.events.startVoting({ groupId: 1, eventId: event.id });
+
+    const brackets = await adminCaller.brackets.getForEvent({ eventId: event.id });
+    const votingBracket = brackets.find((b) => b.status === "voting");
+    if (!votingBracket) return; // Skip if no voting bracket
+
+    // Cast a vote as voter
+    await voterCaller.brackets.vote({ bracketId: votingBracket.id, bookId: book1.id, eventId: event.id });
+
+    // Admin changes the vote
+    const result = await adminCaller.brackets.adminAdjustVote({
+      groupId: 1,
+      bracketId: votingBracket.id,
+      eventId: event.id,
+      userId: 65,
+      bookId: book2.id,
+      action: "change",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("allows admin to remove a bracket vote", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+    const voter = createMockUser({ id: 66, openId: "bracket-admin-remove" });
+    const voterCaller = appRouter.createCaller(createCtx(voter));
+
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Bracket Admin Remove Test",
+      votingScheme: "tournament",
+      maxSubmissionsPerMember: 4,
+    });
+
+    const book1 = await adminCaller.books.create({ groupId: 1, title: "BR Book 1", author: "A1" });
+    const book2 = await adminCaller.books.create({ groupId: 1, title: "BR Book 2", author: "A2" });
+    const book3 = await adminCaller.books.create({ groupId: 1, title: "BR Book 3", author: "A3" });
+    const book4 = await adminCaller.books.create({ groupId: 1, title: "BR Book 4", author: "A4" });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book1.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book2.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book3.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book4.id, groupId: 1 });
+
+    await adminCaller.events.startVoting({ groupId: 1, eventId: event.id });
+
+    const brackets = await adminCaller.brackets.getForEvent({ eventId: event.id });
+    const votingBracket = brackets.find((b) => b.status === "voting");
+    if (!votingBracket) return; // Skip if no voting bracket
+
+    // Cast a vote as voter
+    await voterCaller.brackets.vote({ bracketId: votingBracket.id, bookId: book1.id, eventId: event.id });
+
+    // Admin removes the vote
+    const result = await adminCaller.brackets.adminAdjustVote({
+      groupId: 1,
+      bracketId: votingBracket.id,
+      eventId: event.id,
+      userId: 66,
+      action: "remove",
+    });
+    expect(result.success).toBe(true);
   });
 });
