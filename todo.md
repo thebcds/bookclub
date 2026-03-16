@@ -286,3 +286,11 @@
 - [x] After matchup resolved: show per-book tallies alongside the winner
 - [x] Total group member count passed from EventDetail via members.list query
 - [x] All 112 tests pass
+
+## Admin Undo Resolve & Bracket Voting Reminder (v5.10)
+- [x] Backend: add brackets.undoResolve procedure (admin only) — clears winner, resets to voting, removes winner from next round
+- [x] Backend: handle undo of final match (clear event winner)
+- [x] Backend: add clearBracketWinner, clearBracketBookSlot, clearEventWinner db helpers
+- [x] Frontend: add "Undo Resolve" button on resolved matchups (admin only, amber colored) in BracketTree
+- [x] Frontend: add info banner in bracket view reminding all members to vote on all active matchups
+- [x] Write tests for undo resolve (115 total passing)

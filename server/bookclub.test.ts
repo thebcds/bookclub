@@ -245,6 +245,24 @@ vi.mock("./db", () => {
         if (newRankings !== undefined) vote.rankings = newRankings;
       }
     }),
+    clearBracketWinner: vi.fn().mockImplementation(async (bracketId: number) => {
+      const bracket = brackets.find((b: any) => b.id === bracketId);
+      if (bracket) {
+        bracket.winnerId = null;
+        bracket.status = "voting";
+      }
+    }),
+    clearBracketBookSlot: vi.fn().mockImplementation(async (bracketId: number, slot: "book1" | "book2") => {
+      const bracket = brackets.find((b: any) => b.id === bracketId);
+      if (bracket) {
+        if (slot === "book1") { bracket.book1Id = null; bracket.book1 = null; }
+        else { bracket.book2Id = null; bracket.book2 = null; }
+      }
+    }),
+    clearEventWinner: vi.fn().mockImplementation(async (eventId: number) => {
+      const event = events.find((e: any) => e.id === eventId);
+      if (event) event.winnerBookId = null;
+    }),
   };
 });
 
@@ -1802,5 +1820,112 @@ describe("brackets.adminAdjustVote", () => {
       action: "remove",
     });
     expect(result.success).toBe(true);
+  });
+});
+
+// ─── Admin Undo Resolve Tests ─────────────────────────────────────
+describe("brackets.undoResolve", () => {
+  it("allows admin to undo a resolved matchup", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+
+    // Create a tournament event
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Undo Resolve Test",
+      votingScheme: "tournament",
+      maxSubmissionsPerMember: 4,
+    });
+
+    // Create and submit books
+    const book1 = await adminCaller.books.create({ groupId: 1, title: "UR Book 1", author: "A1" });
+    const book2 = await adminCaller.books.create({ groupId: 1, title: "UR Book 2", author: "A2" });
+    const book3 = await adminCaller.books.create({ groupId: 1, title: "UR Book 3", author: "A3" });
+    const book4 = await adminCaller.books.create({ groupId: 1, title: "UR Book 4", author: "A4" });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book1.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book2.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book3.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book4.id, groupId: 1 });
+
+    // Start voting
+    await adminCaller.events.startVoting({ groupId: 1, eventId: event.id });
+
+    // Get brackets
+    const bracketsBefore = await adminCaller.brackets.getForEvent({ eventId: event.id });
+    const firstMatch = bracketsBefore.find((b: any) => b.round === 1 && b.matchOrder === 1);
+    expect(firstMatch).toBeDefined();
+
+    // Vote and resolve
+    await adminCaller.brackets.vote({ bracketId: firstMatch!.id, bookId: firstMatch!.book1Id!, eventId: event.id });
+    await adminCaller.brackets.resolveMatch({ groupId: 1, bracketId: firstMatch!.id, eventId: event.id });
+
+    // Undo resolve
+    const result = await adminCaller.brackets.undoResolve({ groupId: 1, bracketId: firstMatch!.id, eventId: event.id });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects undo on a matchup that is not resolved", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Undo Unresolved Test",
+      votingScheme: "tournament",
+      maxSubmissionsPerMember: 4,
+    });
+
+    const book1 = await adminCaller.books.create({ groupId: 1, title: "UU Book 1", author: "A1" });
+    const book2 = await adminCaller.books.create({ groupId: 1, title: "UU Book 2", author: "A2" });
+    const book3 = await adminCaller.books.create({ groupId: 1, title: "UU Book 3", author: "A3" });
+    const book4 = await adminCaller.books.create({ groupId: 1, title: "UU Book 4", author: "A4" });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book1.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book2.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book3.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book4.id, groupId: 1 });
+
+    await adminCaller.events.startVoting({ groupId: 1, eventId: event.id });
+
+    const bracketsList = await adminCaller.brackets.getForEvent({ eventId: event.id });
+    const firstMatch = bracketsList.find((b: any) => b.round === 1 && b.matchOrder === 1);
+
+    await expect(
+      adminCaller.brackets.undoResolve({ groupId: 1, bracketId: firstMatch!.id, eventId: event.id })
+    ).rejects.toThrow("This matchup has not been resolved yet");
+  });
+
+  it("rejects undo from non-admin", async () => {
+    const admin = createAdminUser();
+    const member = createMockUser({ id: 70, openId: "undo-resolve-member" });
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+    const memberCaller = appRouter.createCaller(createCtx(member));
+
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Non-Admin Undo Test",
+      votingScheme: "tournament",
+      maxSubmissionsPerMember: 4,
+    });
+
+    const book1 = await adminCaller.books.create({ groupId: 1, title: "NA Book 1", author: "A1" });
+    const book2 = await adminCaller.books.create({ groupId: 1, title: "NA Book 2", author: "A2" });
+    const book3 = await adminCaller.books.create({ groupId: 1, title: "NA Book 3", author: "A3" });
+    const book4 = await adminCaller.books.create({ groupId: 1, title: "NA Book 4", author: "A4" });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book1.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book2.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book3.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book4.id, groupId: 1 });
+
+    await adminCaller.events.startVoting({ groupId: 1, eventId: event.id });
+
+    const bracketsList = await adminCaller.brackets.getForEvent({ eventId: event.id });
+    const firstMatch = bracketsList.find((b: any) => b.round === 1 && b.matchOrder === 1);
+
+    await adminCaller.brackets.vote({ bracketId: firstMatch!.id, bookId: firstMatch!.book1Id!, eventId: event.id });
+    await adminCaller.brackets.resolveMatch({ groupId: 1, bracketId: firstMatch!.id, eventId: event.id });
+
+    await expect(
+      memberCaller.brackets.undoResolve({ groupId: 1, bracketId: firstMatch!.id, eventId: event.id })
+    ).rejects.toThrow();
   });
 });

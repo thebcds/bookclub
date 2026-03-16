@@ -751,3 +751,26 @@ export async function getVoteById(voteId: number) {
   const result = await db.select().from(votes).where(eq(votes.id, voteId)).limit(1);
   return result[0] ?? null;
 }
+
+// ─── Undo Resolve Helpers ──────────────────────────────────────────
+export async function clearBracketWinner(bracketId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(brackets).set({ winnerId: null, status: "voting" }).where(eq(brackets.id, bracketId));
+}
+
+export async function clearBracketBookSlot(bracketId: number, slot: "book1" | "book2") {
+  const db = await getDb();
+  if (!db) return;
+  if (slot === "book1") {
+    await db.update(brackets).set({ book1Id: null }).where(eq(brackets.id, bracketId));
+  } else {
+    await db.update(brackets).set({ book2Id: null }).where(eq(brackets.id, bracketId));
+  }
+}
+
+export async function clearEventWinner(eventId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(events).set({ winningBookId: null, status: "voting" }).where(eq(events.id, eventId));
+}

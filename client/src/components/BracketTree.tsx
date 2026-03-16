@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { trpc } from "@/lib/trpc";
-import { Crown, Loader2, Trophy, Undo2 } from "lucide-react";
+import { Crown, Info, Loader2, RotateCcw, Trophy, Undo2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -63,6 +63,21 @@ export default function BracketTree({ eventId, groupId, brackets, eventStatus, i
     onError: (err) => toast.error(err.message),
   });
 
+  const undoResolveMutation = trpc.brackets.undoResolve.useMutation({
+    onSuccess: () => {
+      toast.success("Resolve undone! Matchup is back to voting.");
+      utils.brackets.getForEvent.invalidate({ eventId });
+      utils.events.getById.invalidate({ id: eventId });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  // Count active voting matchups for the reminder
+  const activeVotingMatches = useMemo(
+    () => brackets.filter((b) => b.status === "voting"),
+    [brackets]
+  );
+
   const maxRound = useMemo(() => Math.max(...brackets.map((b) => b.round)), [brackets]);
 
   // Separate conferences
@@ -100,6 +115,16 @@ export default function BracketTree({ eventId, groupId, brackets, eventStatus, i
 
   return (
     <div className="space-y-8">
+      {/* Voting reminder banner */}
+      {eventStatus === "voting" && activeVotingMatches.length > 0 && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+          <Info className="h-4 w-4 shrink-0" />
+          <span>
+            <strong>{activeVotingMatches.length} active matchup{activeVotingMatches.length > 1 ? "s" : ""}</strong> — all members should vote on every matchup before results are resolved.
+          </span>
+        </div>
+      )}
+
       {/* Conference A */}
       <div>
         <h3 className="font-serif font-bold text-lg mb-4 flex items-center gap-2">
@@ -130,8 +155,12 @@ export default function BracketTree({ eventId, groupId, brackets, eventStatus, i
                   onResolve={(bracketId) =>
                     resolveMutation.mutate({ groupId, bracketId, eventId })
                   }
+                  onUndoResolve={(bracketId) =>
+                    undoResolveMutation.mutate({ groupId, bracketId, eventId })
+                  }
                   isVoting={voteMutation.isPending}
                   isResolving={resolveMutation.isPending}
+                  isUndoingResolve={undoResolveMutation.isPending}
                 />
               );
             })}
@@ -164,8 +193,12 @@ export default function BracketTree({ eventId, groupId, brackets, eventStatus, i
               onResolve={() =>
                 resolveMutation.mutate({ groupId, bracketId: finalMatch.id, eventId })
               }
+              onUndoResolve={() =>
+                undoResolveMutation.mutate({ groupId, bracketId: finalMatch.id, eventId })
+              }
               isVoting={voteMutation.isPending}
               isResolving={resolveMutation.isPending}
+              isUndoingResolve={undoResolveMutation.isPending}
             />
           </div>
         </div>
@@ -201,8 +234,12 @@ export default function BracketTree({ eventId, groupId, brackets, eventStatus, i
                   onResolve={(bracketId) =>
                     resolveMutation.mutate({ groupId, bracketId, eventId })
                   }
+                  onUndoResolve={(bracketId) =>
+                    undoResolveMutation.mutate({ groupId, bracketId, eventId })
+                  }
                   isVoting={voteMutation.isPending}
                   isResolving={resolveMutation.isPending}
+                  isUndoingResolve={undoResolveMutation.isPending}
                 />
               );
             })}
@@ -227,8 +264,10 @@ function RoundColumn({
   totalMembers,
   onVote,
   onResolve,
+  onUndoResolve,
   isVoting,
   isResolving,
+  isUndoingResolve,
 }: {
   round: number;
   maxRound: number;
@@ -242,8 +281,10 @@ function RoundColumn({
   totalMembers?: number;
   onVote: (bracketId: number, bookId: number) => void;
   onResolve: (bracketId: number) => void;
+  onUndoResolve: (bracketId: number) => void;
   isVoting: boolean;
   isResolving: boolean;
+  isUndoingResolve: boolean;
 }) {
   const getRoundLabel = (r: number) => {
     if (r === maxRound) return "Finals";
@@ -271,8 +312,10 @@ function RoundColumn({
             totalMembers={totalMembers}
             onVote={(bookId) => onVote(match.id, bookId)}
             onResolve={() => onResolve(match.id)}
+            onUndoResolve={() => onUndoResolve(match.id)}
             isVoting={isVoting}
             isResolving={isResolving}
+            isUndoingResolve={isUndoingResolve}
           />
         ))}
       </div>
@@ -292,8 +335,10 @@ function MatchNode({
   isFinal,
   onVote,
   onResolve,
+  onUndoResolve,
   isVoting,
   isResolving,
+  isUndoingResolve,
 }: {
   match: BracketMatch;
   eventId: number;
@@ -306,8 +351,10 @@ function MatchNode({
   isFinal?: boolean;
   onVote: (bookId: number) => void;
   onResolve: () => void;
+  onUndoResolve: () => void;
   isVoting: boolean;
   isResolving: boolean;
+  isUndoingResolve: boolean;
 }) {
   const utils = trpc.useUtils();
   const [confirmBookId, setConfirmBookId] = useState<number | null>(null);
@@ -439,6 +486,26 @@ function MatchNode({
               <Trophy className="h-3 w-3 mr-1" />
             )}
             Resolve
+          </Button>
+        </div>
+      )}
+
+      {/* Admin undo resolve button */}
+      {isAdmin && match.status === "completed" && match.winnerId && (
+        <div className="p-2 border-t">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full text-xs h-7 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30 gap-1"
+            onClick={onUndoResolve}
+            disabled={isUndoingResolve}
+          >
+            {isUndoingResolve ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <RotateCcw className="h-3 w-3" />
+            )}
+            Undo Resolve
           </Button>
         </div>
       )}

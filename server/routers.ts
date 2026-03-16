@@ -746,6 +746,59 @@ export const appRouter = router({
 
         return { winnerId };
       }),
+    undoResolve: protectedProcedure
+      .input(z.object({ groupId: z.number(), bracketId: z.number(), eventId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await requireGroupAdmin(ctx.user.id, input.groupId);
+        const allBrackets = await db.getEventBrackets(input.eventId);
+        const bracket = allBrackets.find((b) => b.id === input.bracketId);
+        if (!bracket) throw new TRPCError({ code: "NOT_FOUND", message: "Matchup not found" });
+        if (!bracket.winnerId) throw new TRPCError({ code: "BAD_REQUEST", message: "This matchup has not been resolved yet" });
+
+        // Find the next round match that this winner was advanced to
+        const nextRoundMatches = allBrackets.filter((b) => b.conference === bracket.conference && b.round === bracket.round + 1);
+        if (nextRoundMatches.length > 0) {
+          const nextMatchIdx = Math.floor((bracket.matchOrder - 1) / 2);
+          const nextMatch = nextRoundMatches.find((b) => b.matchOrder === nextMatchIdx + 1);
+          if (nextMatch) {
+            // Check if the next round match has already been resolved — can't undo if downstream is resolved
+            if (nextMatch.winnerId) throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot undo: the next round matchup has already been resolved. Undo that one first." });
+            const isFirstSlot = (bracket.matchOrder - 1) % 2 === 0;
+            // Clear the winner from the next round slot and reset it to pending
+            await db.clearBracketBookSlot(nextMatch.id, isFirstSlot ? "book1" : "book2");
+            await db.updateBracketStatus(nextMatch.id, "pending");
+            // Also delete any votes cast on the next round match since it's being reset
+            const nextVotes = await db.getBracketVotes(nextMatch.id);
+            for (const v of nextVotes) await db.deleteUserVoteForBracket(nextMatch.id, v.userId);
+          }
+        }
+
+        // Check for finals (cross-conference) — if this was a conf final, clear the championship match
+        const maxRoundInConf = Math.max(...allBrackets.filter((b) => b.conference === bracket.conference).map((b) => b.round));
+        if (bracket.round === maxRoundInConf) {
+          const finalMatch = allBrackets.find((b) => b.round === maxRoundInConf + 1);
+          if (finalMatch) {
+            if (finalMatch.winnerId) throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot undo: the championship match has already been resolved. Undo that one first." });
+            const isConfA = bracket.conference === "A";
+            await db.clearBracketBookSlot(finalMatch.id, isConfA ? "book1" : "book2");
+            await db.updateBracketStatus(finalMatch.id, "pending");
+            const finalVotes = await db.getBracketVotes(finalMatch.id);
+            for (const v of finalVotes) await db.deleteUserVoteForBracket(finalMatch.id, v.userId);
+          }
+        }
+
+        // Check if this was the final match — if so, clear the event winner
+        const maxRound = Math.max(...allBrackets.map((b) => b.round));
+        const finalMatch = allBrackets.find((b) => b.round === maxRound);
+        if (finalMatch?.id === input.bracketId) {
+          await db.clearEventWinner(input.eventId);
+        }
+
+        // Clear the winner on this matchup and reset to voting
+        await db.clearBracketWinner(input.bracketId);
+
+        return { success: true };
+      }),
   }),
 
   // ─── Voting (simple majority & ranked choice) ─────────────────
