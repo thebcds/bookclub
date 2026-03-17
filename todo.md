@@ -294,3 +294,14 @@
 - [x] Frontend: add "Undo Resolve" button on resolved matchups (admin only, amber colored) in BracketTree
 - [x] Frontend: add info banner in bracket view reminding all members to vote on all active matchups
 - [x] Write tests for undo resolve (115 total passing)
+
+## Voter Participation Indicator (v5.11)
+- [x] Backend: add brackets.getVoters procedure — returns voter names/avatars for each bracket matchup
+- [x] Backend: add voting.getVoters procedure — returns voter names/avatars for simple/ranked voting events
+- [x] Backend: add getBracketVoters and getEventVoters db helpers (join votes with users table)
+- [x] Frontend (bracket): show avatars/names of who has voted on each matchup in BracketTree
+- [x] Frontend (simple/ranked voting): show VoterList component with avatars/names on VotingView
+- [x] When anonymousVoting is OFF (public vote): show who voted AND what they voted for
+- [x] When anonymousVoting is ON: only show anonymous count (no names/choices) for non-creators; creator sees full info
+- [x] Query invalidation: getVoters queries invalidated on vote cast, undo, and admin adjust
+- [x] Write tests for voter participation indicator (120 total passing, 5 new tests)

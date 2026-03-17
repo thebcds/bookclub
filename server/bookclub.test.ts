@@ -263,6 +263,22 @@ vi.mock("./db", () => {
       const event = events.find((e: any) => e.id === eventId);
       if (event) event.winnerBookId = null;
     }),
+    getBracketVoters: vi.fn().mockImplementation(async (bracketId: number) => {
+      return votes.filter((v: any) => v.bracketId === bracketId).map((v: any) => ({
+        userId: v.userId,
+        userName: "Test User",
+        avatarUrl: null,
+        bookId: v.bookId,
+      }));
+    }),
+    getEventVoters: vi.fn().mockImplementation(async (eventId: number) => {
+      return votes.filter((v: any) => v.eventId === eventId && !v.bracketId).map((v: any) => ({
+        userId: v.userId,
+        userName: "Test User",
+        avatarUrl: null,
+        bookId: v.bookId,
+      }));
+    }),
   };
 });
 
@@ -1927,5 +1943,170 @@ describe("brackets.undoResolve", () => {
     await expect(
       memberCaller.brackets.undoResolve({ groupId: 1, bracketId: firstMatch!.id, eventId: event.id })
     ).rejects.toThrow();
+  });
+});
+
+// ─── Voter Participation Indicators ────────────────────────────────
+describe("brackets.getVoters", () => {
+  it("returns voter list for bracket matchup (non-anonymous)", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+    const member = createMockUser(); // id: 1, pre-seeded as group member
+    const memberCaller = appRouter.createCaller(createCtx(member));
+
+    // Create tournament event with maxSubmissionsPerMember: 4
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Bracket Voters Test",
+      votingScheme: "tournament",
+      maxSubmissionsPerMember: 4,
+    });
+
+    // Submit 2 books and start voting
+    const book1 = await adminCaller.books.create({ groupId: 1, title: "Voters Book A", author: "Author A" });
+    const book2 = await adminCaller.books.create({ groupId: 1, title: "Voters Book B", author: "Author B" });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book1.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book2.id, groupId: 1 });
+    await adminCaller.events.startVoting({ eventId: event.id, groupId: 1 });
+
+    const bracketsList = await adminCaller.brackets.getForEvent({ eventId: event.id });
+    const votingBracket = bracketsList.find((b: any) => b.book1Id && b.book2Id);
+    if (!votingBracket) return;
+
+    // Cast a vote as member
+    await memberCaller.brackets.vote({ bracketId: votingBracket.id, bookId: book1.id, eventId: event.id });
+
+    // Get voters - should show real identity since not anonymous
+    const voters = await adminCaller.brackets.getVoters({ bracketId: votingBracket.id, eventId: event.id });
+    expect(voters.length).toBe(1);
+    expect(voters[0].userId).toBe(1);
+    expect(voters[0].bookId).toBe(book1.id);
+  });
+
+  it("anonymizes voter list when anonymousVoting is enabled (non-creator)", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+    const member = createMockUser(); // id: 1, pre-seeded as group member
+    const memberCaller = appRouter.createCaller(createCtx(member));
+
+    // Create event with anonymous voting
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Bracket Anon Voters Test",
+      votingScheme: "tournament",
+      anonymousVoting: true,
+      maxSubmissionsPerMember: 4,
+    });
+
+    const book1 = await adminCaller.books.create({ groupId: 1, title: "Anon Voter Book A", author: "Author A" });
+    const book2 = await adminCaller.books.create({ groupId: 1, title: "Anon Voter Book B", author: "Author B" });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book1.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book2.id, groupId: 1 });
+    await adminCaller.events.startVoting({ eventId: event.id, groupId: 1 });
+
+    const bracketsList = await adminCaller.brackets.getForEvent({ eventId: event.id });
+    const votingBracket = bracketsList.find((b: any) => b.book1Id && b.book2Id);
+    if (!votingBracket) return;
+
+    await adminCaller.brackets.vote({ bracketId: votingBracket.id, bookId: book1.id, eventId: event.id });
+
+    // Non-creator (member) should see anonymized voters
+    const voters = await memberCaller.brackets.getVoters({ bracketId: votingBracket.id, eventId: event.id });
+    expect(voters.length).toBe(1);
+    expect(voters[0].userId).toBe(0);
+    expect(voters[0].userName).toBe("Anonymous");
+    expect(voters[0].bookId).toBeNull();
+
+    // Creator should see real voter info
+    const adminVoters = await adminCaller.brackets.getVoters({ bracketId: votingBracket.id, eventId: event.id });
+    expect(adminVoters.length).toBe(1);
+    expect(adminVoters[0].userId).toBe(99);
+  });
+});
+
+describe("voting.getVoters", () => {
+  it("returns voter list for simple majority event (non-anonymous)", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+    const member = createMockUser(); // id: 1, pre-seeded as group member
+    const memberCaller = appRouter.createCaller(createCtx(member));
+
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Voting Voters Test",
+      votingScheme: "simple_majority",
+      maxSubmissionsPerMember: 4,
+    });
+
+    const book1 = await adminCaller.books.create({ groupId: 1, title: "Voting Voter Book A", author: "Author A" });
+    const book2 = await adminCaller.books.create({ groupId: 1, title: "Voting Voter Book B", author: "Author B" });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book1.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book2.id, groupId: 1 });
+    await adminCaller.events.startVoting({ eventId: event.id, groupId: 1 });
+
+    // Cast a vote as member
+    await memberCaller.voting.castSimple({ eventId: event.id, bookId: book1.id });
+
+    // Get voters - should show real identity
+    const voters = await adminCaller.voting.getVoters({ eventId: event.id });
+    expect(voters.length).toBe(1);
+    expect(voters[0].userId).toBe(1);
+    expect(voters[0].bookId).toBe(book1.id);
+  });
+
+  it("anonymizes voter list when anonymousVoting is enabled (non-creator)", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+    const member = createMockUser(); // id: 1, pre-seeded as group member
+    const memberCaller = appRouter.createCaller(createCtx(member));
+
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Voting Anon Voters Test",
+      votingScheme: "simple_majority",
+      anonymousVoting: true,
+      maxSubmissionsPerMember: 4,
+    });
+
+    const book1 = await adminCaller.books.create({ groupId: 1, title: "Anon V Book A", author: "Author A" });
+    const book2 = await adminCaller.books.create({ groupId: 1, title: "Anon V Book B", author: "Author B" });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book1.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book2.id, groupId: 1 });
+    await adminCaller.events.startVoting({ eventId: event.id, groupId: 1 });
+
+    await adminCaller.voting.castSimple({ eventId: event.id, bookId: book1.id });
+
+    // Non-creator (member) should see anonymized voters
+    const voters = await memberCaller.voting.getVoters({ eventId: event.id });
+    expect(voters.length).toBe(1);
+    expect(voters[0].userId).toBe(0);
+    expect(voters[0].userName).toBe("Anonymous");
+    expect(voters[0].bookId).toBeNull();
+
+    // Creator should see real voter info
+    const adminVoters = await adminCaller.voting.getVoters({ eventId: event.id });
+    expect(adminVoters.length).toBe(1);
+    expect(adminVoters[0].userId).toBe(99);
+  });
+
+  it("returns empty array when no votes have been cast", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Empty Voters Test",
+      votingScheme: "simple_majority",
+      maxSubmissionsPerMember: 4,
+    });
+
+    const book1 = await adminCaller.books.create({ groupId: 1, title: "Empty V Book A", author: "Author A" });
+    const book2 = await adminCaller.books.create({ groupId: 1, title: "Empty V Book B", author: "Author B" });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book1.id, groupId: 1 });
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book2.id, groupId: 1 });
+    await adminCaller.events.startVoting({ eventId: event.id, groupId: 1 });
+
+    const voters = await adminCaller.voting.getVoters({ eventId: event.id });
+    expect(voters.length).toBe(0);
   });
 });

@@ -50,6 +50,7 @@ export default function BracketTree({ eventId, groupId, brackets, eventStatus, i
     onSuccess: () => {
       toast.success("Vote cast!");
       utils.brackets.getForEvent.invalidate({ eventId });
+      utils.brackets.getVoters.invalidate();
     },
     onError: (err) => toast.error(err.message),
   });
@@ -367,12 +368,17 @@ function MatchNode({
     { bracketId: match.id, eventId },
     { enabled: match.status !== "pending" }
   );
+  const { data: voters } = trpc.brackets.getVoters.useQuery(
+    { bracketId: match.id, eventId },
+    { enabled: match.status !== "pending" }
+  );
 
   const undoVote = trpc.brackets.undoVote.useMutation({
     onSuccess: () => {
       toast.success("Vote retracted");
       utils.brackets.myVote.invalidate({ bracketId: match.id });
       utils.brackets.getVotes.invalidate({ bracketId: match.id, eventId });
+      utils.brackets.getVoters.invalidate({ bracketId: match.id, eventId });
       utils.brackets.getForEvent.invalidate({ eventId });
     },
     onError: (err) => toast.error(err.message),
@@ -382,6 +388,7 @@ function MatchNode({
     onSuccess: () => {
       toast.success("Vote adjusted");
       utils.brackets.getVotes.invalidate({ bracketId: match.id, eventId });
+      utils.brackets.getVoters.invalidate({ bracketId: match.id, eventId });
       utils.brackets.getForEvent.invalidate({ eventId });
     },
     onError: (err) => toast.error(err.message),
@@ -442,6 +449,36 @@ function MatchNode({
         )}
         <div className="flex-1 h-px bg-border" />
       </div>
+
+      {/* Voter participation list */}
+      {voters && voters.length > 0 && match.status !== "pending" && (
+        <div className="px-3 pb-1">
+          <div className="flex flex-wrap gap-1 items-center">
+            {voters.map((v, i) => {
+              const isAnon = v.userId === 0;
+              const votedBookTitle = !isAnon && !anonymousVoting && v.bookId
+                ? (v.bookId === match.book1Id ? match.book1?.title : v.bookId === match.book2Id ? match.book2?.title : null)
+                : null;
+              return (
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground bg-muted/60 rounded-full px-1.5 py-0.5"
+                  title={votedBookTitle ? `Voted for ${votedBookTitle}` : isAnon ? "Anonymous voter" : (v.userName ?? "Member")}
+                >
+                  {v.avatarUrl ? (
+                    <img src={v.avatarUrl} alt="" className="h-3 w-3 rounded-full" />
+                  ) : (
+                    <span className="h-3 w-3 rounded-full bg-primary/20 flex items-center justify-center text-[7px] font-bold">
+                      {isAnon ? "?" : (v.userName?.[0] ?? "?")}
+                    </span>
+                  )}
+                  <span className="truncate max-w-[60px]">{isAnon ? "Anon" : (v.userName?.split(" ")[0] ?? "?")}</span>
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Book 2 slot */}
       <BookSlot

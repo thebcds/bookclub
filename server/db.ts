@@ -774,3 +774,34 @@ export async function clearEventWinner(eventId: number) {
   if (!db) return;
   await db.update(events).set({ winningBookId: null, status: "voting" }).where(eq(events.id, eventId));
 }
+
+// ─── Voter Participation Indicators ────────────────────────────────
+export async function getBracketVoters(bracketId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      userId: votes.userId,
+      userName: users.name,
+      avatarUrl: users.avatarUrl,
+      bookId: votes.bookId,
+    })
+    .from(votes)
+    .innerJoin(users, eq(votes.userId, users.id))
+    .where(eq(votes.bracketId, bracketId));
+}
+
+export async function getEventVoters(eventId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      userId: votes.userId,
+      userName: users.name,
+      avatarUrl: users.avatarUrl,
+      bookId: votes.bookId,
+    })
+    .from(votes)
+    .innerJoin(users, eq(votes.userId, users.id))
+    .where(and(eq(votes.eventId, eventId), isNull(votes.bracketId)));
+}

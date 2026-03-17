@@ -642,6 +642,19 @@ export const appRouter = router({
         }
         return votes;
       }),
+    getVoters: protectedProcedure
+      .input(z.object({ bracketId: z.number(), eventId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const voters = await db.getBracketVoters(input.bracketId);
+        const event = await db.getEventById(input.eventId);
+        if (!event) return [];
+        // If anonymous voting is ON, only show that people voted (no names/choices) for non-creators
+        if (event.anonymousVoting && ctx.user.id !== event.createdBy) {
+          return voters.map(() => ({ userId: 0, userName: "Anonymous", avatarUrl: null, bookId: null }));
+        }
+        // If anonymous voting is OFF (public vote), show who voted AND what they voted for
+        return voters.map((v) => ({ userId: v.userId, userName: v.userName, avatarUrl: v.avatarUrl, bookId: v.bookId }));
+      }),
     myVote: protectedProcedure
       .input(z.object({ bracketId: z.number() }))
       .query(async ({ ctx, input }) => {
@@ -835,6 +848,19 @@ export const appRouter = router({
         }
         if (event.votingScheme === "ranked_choice") return runRankedChoice(allVotes, subs);
         return { scheme: event.votingScheme, results: [], totalVotes: allVotes.length };
+      }),
+    getVoters: protectedProcedure
+      .input(z.object({ eventId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const voters = await db.getEventVoters(input.eventId);
+        const event = await db.getEventById(input.eventId);
+        if (!event) return [];
+        // If anonymous voting is ON, only show count (no names/choices) for non-creators
+        if (event.anonymousVoting && ctx.user.id !== event.createdBy) {
+          return voters.map(() => ({ userId: 0, userName: "Anonymous", avatarUrl: null, bookId: null }));
+        }
+        // If anonymous voting is OFF (public vote), show who voted AND what they voted for
+        return voters.map((v) => ({ userId: v.userId, userName: v.userName, avatarUrl: v.avatarUrl, bookId: v.bookId }));
       }),
     myVote: protectedProcedure
       .input(z.object({ eventId: z.number() }))

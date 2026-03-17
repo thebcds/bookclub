@@ -1252,6 +1252,7 @@ function VotingView({
       toast.success("Vote cast!");
       utils.voting.myVote.invalidate({ eventId });
       utils.voting.getResults.invalidate({ eventId });
+      utils.voting.getVoters.invalidate({ eventId });
     },
     onError: (err) => toast.error(err.message),
   });
@@ -1261,6 +1262,7 @@ function VotingView({
       toast.success("Rankings submitted!");
       utils.voting.myVote.invalidate({ eventId });
       utils.voting.getResults.invalidate({ eventId });
+      utils.voting.getVoters.invalidate({ eventId });
     },
     onError: (err) => toast.error(err.message),
   });
@@ -1270,6 +1272,7 @@ function VotingView({
       toast.success("Vote retracted");
       utils.voting.myVote.invalidate({ eventId });
       utils.voting.getResults.invalidate({ eventId });
+      utils.voting.getVoters.invalidate({ eventId });
     },
     onError: (err) => toast.error(err.message),
   });
@@ -1278,11 +1281,55 @@ function VotingView({
     onSuccess: () => {
       toast.success("Vote adjusted");
       utils.voting.getResults.invalidate({ eventId });
+      utils.voting.getVoters.invalidate({ eventId });
     },
     onError: (err) => toast.error(err.message),
   });
 
   const canVote = event.status === "voting" && !myVote;
+
+  // Fetch voter list for participation indicator
+  const { data: voters } = trpc.voting.getVoters.useQuery(
+    { eventId },
+    { enabled: event.status === "voting" || event.status === "completed" }
+  );
+
+  // Voter participation indicator component
+  const VoterList = () => {
+    if (!voters || voters.length === 0) return null;
+    return (
+      <div className="rounded-lg border bg-muted/30 px-4 py-3">
+        <p className="text-xs font-medium text-muted-foreground mb-2">
+          {voters.length} member{voters.length !== 1 ? "s" : ""} voted
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {voters.map((v, i) => {
+            const isAnon = v.userId === 0;
+            const votedBook = !isAnon && !event.anonymousVoting && v.bookId
+              ? subs.find((s: any) => s.bookId === v.bookId)?.bookTitle
+              : null;
+            return (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-background rounded-full px-2 py-1 border"
+                title={votedBook ? `Voted for ${votedBook}` : isAnon ? "Anonymous voter" : (v.userName ?? "Member")}
+              >
+                {v.avatarUrl ? (
+                  <img src={v.avatarUrl} alt="" className="h-4 w-4 rounded-full" />
+                ) : (
+                  <span className="h-4 w-4 rounded-full bg-primary/20 flex items-center justify-center text-[8px] font-bold">
+                    {isAnon ? "?" : (v.userName?.[0] ?? "?")}
+                  </span>
+                )}
+                <span className="truncate max-w-[80px]">{isAnon ? "Anon" : (v.userName?.split(" ")[0] ?? "?")}</span>
+                {votedBook && <span className="text-[10px] text-primary/70">({votedBook})</span>}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   if (event.votingScheme === "simple_majority") {
     return (
@@ -1378,6 +1425,7 @@ function VotingView({
             </Card>
           ))}
         </div>
+        <VoterList />
         {isAdmin && (
           <AdminVoteAdjuster
             eventId={eventId}
@@ -1558,6 +1606,7 @@ function VotingView({
           )}
         </div>
       )}
+      <VoterList />
       {isAdmin && (
         <AdminVoteAdjuster
           eventId={eventId}
