@@ -21,6 +21,7 @@ export const users = mysqlTable("users", {
   bio: text("bio"),
   favoriteGenres: json("favoriteGenres").$type<string[]>().default([]),
   avatarUrl: text("avatarUrl"),
+  preferredLibrary: text("preferredLibrary"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),

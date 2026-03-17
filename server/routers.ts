@@ -1102,9 +1102,9 @@ export const appRouter = router({
         return db.getUserProfile(input.userId);
       }),
     update: protectedProcedure
-      .input(z.object({ bio: z.string().max(500).optional(), favoriteGenres: z.array(z.string()).max(20).optional() }))
+      .input(z.object({ bio: z.string().max(500).optional(), favoriteGenres: z.array(z.string()).max(20).optional(), preferredLibrary: z.string().max(200).nullable().optional() }))
       .mutation(async ({ ctx, input }) => {
-        await db.updateUserProfile(ctx.user.id, { bio: input.bio, favoriteGenres: input.favoriteGenres });
+        await db.updateUserProfile(ctx.user.id, { bio: input.bio, favoriteGenres: input.favoriteGenres, preferredLibrary: input.preferredLibrary });
         return { success: true };
       }),
     uploadAvatar: protectedProcedure

@@ -305,3 +305,18 @@
 - [x] When anonymousVoting is ON: only show anonymous count (no names/choices) for non-creators; creator sees full info
 - [x] Query invalidation: getVoters queries invalidated on vote cast, undo, and admin adjust
 - [x] Write tests for voter participation indicator (120 total passing, 5 new tests)
+
+## Book Purchase & Borrow Links (v5.12)
+- [x] Backend: add preferredLibrary field to users table schema + db:push migration
+- [x] Backend: update getUserProfile and updateUserProfile to include preferredLibrary
+- [x] Backend: update profile.update procedure to accept preferredLibrary (string|null)
+- [x] Frontend: create BookLinks component with compact and full variants (Amazon, B&N, Bookshop.org, Google Books, Open Library, WorldCat)
+- [x] Frontend: create BookLinksMinimal component for tight spaces (bracket matchups)
+- [x] Frontend: add library system selector to Profile page (17 popular libraries + custom library support)
+- [x] Frontend: add BookLinks (full) to SubmissionCard collapsible area
+- [x] Frontend: add BookLinks (compact) to simple majority voting cards
+- [x] Frontend: add BookLinks (compact) to ranked choice voting cards and results
+- [x] Frontend: add BookLinksMinimal to BracketTree BookSlot (Buy/Borrow/Library links)
+- [x] Frontend: add BookLinks (full, emphasized) to WinnerCard with amber highlight
+- [x] Frontend: library preference from profile auto-populates custom library link across all views
+- [x] Write tests for preferredLibrary in profile (124 total passing, 4 new tests)

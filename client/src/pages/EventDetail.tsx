@@ -1,4 +1,5 @@
 import BracketTree from "@/components/BracketTree";
+import BookLinks from "@/components/BookLinks";
 import OpenLibrarySearch from "@/components/OpenLibrarySearch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -610,12 +611,15 @@ function WinnerCard({ bookId }: { bookId: number }) {
             <Crown className="h-6 w-6 text-primary" />
           </div>
         )}
-        <div>
+        <div className="flex-1">
           <p className="text-xs text-muted-foreground uppercase tracking-wider">
             Winner
           </p>
           <p className="font-serif font-bold text-lg">{book.title}</p>
           <p className="text-sm text-muted-foreground">by {book.author}</p>
+          <div className="mt-3">
+            <BookLinks title={book.title} author={book.author} isbn={book.isbn} variant="full" isWinner />
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -817,6 +821,15 @@ function SubmissionCard({ sub, event, eventId, currentUserId }: { sub: any; even
                   Source: {summaryData.source === "openlibrary" ? "Open Library" : summaryData.source === "stored" ? "Saved" : "AI-generated"}
                 </p>
               )}
+              <div className="mt-3 pt-3 border-t">
+                <BookLinks
+                  title={sub.bookTitle}
+                  author={sub.bookAuthor}
+                  isbn={sub.bookIsbn}
+                  variant="full"
+                  isWinner={event.winningBookId === sub.bookId}
+                />
+              </div>
             </div>
           </CollapsibleContent>
         </CardContent>
@@ -1389,6 +1402,9 @@ function VotingView({
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold truncate">{sub.bookTitle}</p>
                   <p className="text-sm text-muted-foreground">{sub.bookAuthor}</p>
+                  <div className="mt-1">
+                    <BookLinks title={sub.bookTitle} author={sub.bookAuthor} isbn={sub.bookIsbn} variant="compact" />
+                  </div>
                 </div>
                 {results?.results && !(event.hideTalliesUntilComplete && event.status !== "completed") && (
                   <div className="text-right shrink-0">
@@ -1504,10 +1520,13 @@ function VotingView({
                     ) : (
                       <BookOpen className="h-4 w-4 text-primary shrink-0" />
                     )}
-                    <span className="font-medium truncate">{sub.bookTitle}</span>
-                    <span className="text-sm text-muted-foreground">
-                      {sub.bookAuthor}
-                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span className="font-medium truncate block">{sub.bookTitle}</span>
+                      <span className="text-sm text-muted-foreground block">{sub.bookAuthor}</span>
+                      <div className="mt-0.5" onClick={(e) => e.stopPropagation()}>
+                        <BookLinks title={sub.bookTitle} author={sub.bookAuthor} isbn={sub.bookIsbn} variant="compact" />
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -1599,6 +1618,9 @@ function VotingView({
                 <div className="min-w-0 flex-1">
                   <p className="font-medium truncate">{r.bookTitle}</p>
                   <p className="text-xs text-muted-foreground">{r.bookAuthor}</p>
+                  <div className="mt-0.5">
+                    <BookLinks title={r.bookTitle} author={r.bookAuthor} isbn={r.bookIsbn} variant="compact" />
+                  </div>
                 </div>
                 <span className="font-bold">{r.votes} votes</span>
               </div>

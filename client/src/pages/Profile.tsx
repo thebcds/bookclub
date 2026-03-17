@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
-import { Camera, Loader2, Save, User, BookOpen, Users, MessageSquare, Vote, X } from "lucide-react";
+import { Camera, Loader2, Save, User, BookOpen, Users, MessageSquare, Vote, X, Library, Trash2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
@@ -15,6 +15,27 @@ const GENRE_OPTIONS = [
   "Literary Fiction", "Non-Fiction", "Biography", "History",
   "Philosophy", "Science", "Self-Help", "Poetry", "Classics",
   "Young Adult", "Graphic Novels", "True Crime", "Humor", "Travel",
+];
+
+// Common library systems users might want to search
+const POPULAR_LIBRARIES = [
+  { name: "New York Public Library", url: "https://nypl.bibliocommons.com" },
+  { name: "Los Angeles Public Library", url: "https://lapl.bibliocommons.com" },
+  { name: "Chicago Public Library", url: "https://chipublib.bibliocommons.com" },
+  { name: "Brooklyn Public Library", url: "https://bpl.bibliocommons.com" },
+  { name: "San Francisco Public Library", url: "https://sfpl.bibliocommons.com" },
+  { name: "Seattle Public Library", url: "https://seattle.bibliocommons.com" },
+  { name: "Boston Public Library", url: "https://bpl.bibliocommons.com" },
+  { name: "Houston Public Library", url: "https://houstonlibrary.bibliocommons.com" },
+  { name: "Denver Public Library", url: "https://denver.bibliocommons.com" },
+  { name: "Austin Public Library", url: "https://austin.bibliocommons.com" },
+  { name: "Portland Public Library (Multnomah)", url: "https://multcolib.bibliocommons.com" },
+  { name: "San Diego Public Library", url: "https://sandiego.bibliocommons.com" },
+  { name: "Phoenix Public Library", url: "https://phoenix.bibliocommons.com" },
+  { name: "Dallas Public Library", url: "https://dallaslibrary.bibliocommons.com" },
+  { name: "Toronto Public Library", url: "https://torontopubliclibrary.bibliocommons.com" },
+  { name: "Vancouver Public Library", url: "https://vpl.bibliocommons.com" },
+  { name: "London Public Library (UK)", url: "https://london.bibliocommons.com" },
 ];
 
 export default function Profile() {
@@ -29,6 +50,11 @@ export default function Profile() {
   const [bio, setBio] = useState("");
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [librarySearch, setLibrarySearch] = useState("");
+  const [customLibraryName, setCustomLibraryName] = useState("");
+  const [customLibraryUrl, setCustomLibraryUrl] = useState("");
+  const [showCustomLibrary, setShowCustomLibrary] = useState(false);
+  const [preferredLibrary, setPreferredLibrary] = useState<string | null>(null);
 
   useEffect(() => {
     if (profile) {
@@ -38,6 +64,7 @@ export default function Profile() {
         setSelectedGenres(Array.isArray(parsed) ? parsed : []);
       } catch { setSelectedGenres([]); }
       setAvatarPreview(profile.avatarUrl ?? null);
+      setPreferredLibrary(profile.preferredLibrary ?? null);
     }
   }, [profile]);
 
@@ -78,6 +105,39 @@ export default function Profile() {
     };
     reader.readAsDataURL(file);
   };
+
+  const filteredLibraries = librarySearch.trim()
+    ? POPULAR_LIBRARIES.filter((lib) =>
+        lib.name.toLowerCase().includes(librarySearch.toLowerCase())
+      )
+    : POPULAR_LIBRARIES;
+
+  const selectLibrary = (name: string, url: string) => {
+    const value = `${name}|${url}`;
+    setPreferredLibrary(value);
+    setLibrarySearch("");
+    toast.success(`Library set to ${name}`);
+  };
+
+  const clearLibrary = () => {
+    setPreferredLibrary(null);
+    toast.success("Library preference cleared");
+  };
+
+  const addCustomLibrary = () => {
+    if (!customLibraryName.trim() || !customLibraryUrl.trim()) {
+      toast.error("Please enter both a library name and catalog URL");
+      return;
+    }
+    let url = customLibraryUrl.trim();
+    if (!url.startsWith("http")) url = `https://${url}`;
+    selectLibrary(customLibraryName.trim(), url);
+    setCustomLibraryName("");
+    setCustomLibraryUrl("");
+    setShowCustomLibrary(false);
+  };
+
+  const currentLibraryName = preferredLibrary?.split("|")[0] ?? null;
 
   if (profileLoading) {
     return (
@@ -202,12 +262,108 @@ export default function Profile() {
           </div>
 
           <Button
-            onClick={() => updateProfile.mutate({ bio, favoriteGenres: selectedGenres })}
+            onClick={() => updateProfile.mutate({ bio, favoriteGenres: selectedGenres, preferredLibrary })}
             disabled={updateProfile.isPending}
           >
             {updateProfile.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             Save Profile
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Library Preference */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Library className="h-5 w-5" />
+            Library Preference
+          </CardTitle>
+          <CardDescription>
+            Set your preferred library system. When browsing books, you&apos;ll see a quick link to check availability at your library.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Current selection */}
+          {currentLibraryName ? (
+            <div className="flex items-center gap-3 p-3 rounded-lg border bg-primary/5 border-primary/20">
+              <Library className="h-5 w-5 text-primary shrink-0" />
+              <div className="flex-1">
+                <p className="font-medium text-sm">{currentLibraryName}</p>
+                <p className="text-xs text-muted-foreground">Your preferred library for book availability checks</p>
+              </div>
+              <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-destructive" onClick={clearLibrary}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No library selected. Choose one below to see availability links when browsing books.</p>
+          )}
+
+          {/* Search */}
+          <div className="space-y-2">
+            <Label>Search popular libraries</Label>
+            <Input
+              placeholder="Type to search (e.g., Seattle, Toronto, New York...)"
+              value={librarySearch}
+              onChange={(e) => setLibrarySearch(e.target.value)}
+            />
+          </div>
+
+          {/* Library list */}
+          <div className="grid gap-1.5 max-h-48 overflow-y-auto rounded-lg border p-2">
+            {filteredLibraries.map((lib) => (
+              <button
+                key={lib.url}
+                className={`text-left px-3 py-2 rounded-md text-sm transition-colors hover:bg-accent ${
+                  preferredLibrary === `${lib.name}|${lib.url}` ? "bg-primary/10 text-primary font-medium" : "text-foreground"
+                }`}
+                onClick={() => selectLibrary(lib.name, lib.url)}
+              >
+                {lib.name}
+              </button>
+            ))}
+            {filteredLibraries.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-2">No matching libraries found</p>
+            )}
+          </div>
+
+          {/* Custom library */}
+          <div className="space-y-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowCustomLibrary(!showCustomLibrary)}
+            >
+              {showCustomLibrary ? "Cancel" : "Add custom library"}
+            </Button>
+            {showCustomLibrary && (
+              <div className="space-y-2 p-3 rounded-lg border bg-muted/30">
+                <p className="text-xs text-muted-foreground">
+                  Enter your library&apos;s name and online catalog URL. The URL should be the base address of your library&apos;s search page.
+                </p>
+                <Input
+                  placeholder="Library name (e.g., My Local Library)"
+                  value={customLibraryName}
+                  onChange={(e) => setCustomLibraryName(e.target.value)}
+                />
+                <Input
+                  placeholder="Catalog URL (e.g., https://mylibrary.bibliocommons.com)"
+                  value={customLibraryUrl}
+                  onChange={(e) => setCustomLibraryUrl(e.target.value)}
+                />
+                <Button size="sm" onClick={addCustomLibrary}>
+                  Add Library
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Save reminder */}
+          {preferredLibrary !== (profile?.preferredLibrary ?? null) && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Don&apos;t forget to click &quot;Save Profile&quot; above to save your library preference.
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>

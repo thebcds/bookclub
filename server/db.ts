@@ -650,13 +650,14 @@ export async function getReadBooks(groupId: number) {
 }
 
 // ─── Member Profiles ──────────────────────────────────────────────
-export async function updateUserProfile(userId: number, data: { bio?: string; favoriteGenres?: string[]; avatarUrl?: string }) {
+export async function updateUserProfile(userId: number, data: { bio?: string; favoriteGenres?: string[]; avatarUrl?: string; preferredLibrary?: string | null }) {
   const db = await getDb();
   if (!db) return;
   const updateData: Record<string, unknown> = {};
   if (data.bio !== undefined) updateData.bio = data.bio;
   if (data.favoriteGenres !== undefined) updateData.favoriteGenres = JSON.stringify(data.favoriteGenres);
   if (data.avatarUrl !== undefined) updateData.avatarUrl = data.avatarUrl;
+  if (data.preferredLibrary !== undefined) updateData.preferredLibrary = data.preferredLibrary;
   if (Object.keys(updateData).length > 0) {
     await db.update(users).set(updateData).where(eq(users.id, userId));
   }
@@ -672,6 +673,7 @@ export async function getUserProfile(userId: number) {
     bio: users.bio,
     favoriteGenres: users.favoriteGenres,
     avatarUrl: users.avatarUrl,
+    preferredLibrary: users.preferredLibrary,
     createdAt: users.createdAt,
   }).from(users).where(eq(users.id, userId)).limit(1);
   return result[0] ?? undefined;

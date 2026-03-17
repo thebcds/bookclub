@@ -214,7 +214,7 @@ vi.mock("./db", () => {
     // Profile functions
     updateUserProfile: vi.fn().mockResolvedValue(undefined),
     getUserProfile: vi.fn().mockImplementation(async (userId: number) => {
-      return { id: userId, name: "Test User", email: "test@example.com", bio: null, favoriteGenres: "[]", avatarUrl: null, createdAt: new Date() };
+      return { id: userId, name: "Test User", email: "test@example.com", bio: null, favoriteGenres: "[]", avatarUrl: null, preferredLibrary: null, createdAt: new Date() };
     }),
     getUserStats: vi.fn().mockResolvedValue({ groupsJoined: 1, eventsParticipated: 0, reviewsWritten: 0, votesCast: 0 }),
     // Submission removal functions
@@ -1041,6 +1041,38 @@ describe("profile", () => {
   it("rejects unauthenticated profile access", async () => {
     const caller = appRouter.createCaller(createCtx(null));
     await expect(caller.profile.me()).rejects.toThrow();
+  });
+
+  it("updates profile with preferredLibrary", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.profile.update({
+      preferredLibrary: "Seattle Public Library|https://seattle.bibliocommons.com",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("clears preferredLibrary when set to null", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.profile.update({
+      preferredLibrary: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("updates bio, genres, and library together", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.profile.update({
+      bio: "I love books",
+      favoriteGenres: ["Sci-Fi"],
+      preferredLibrary: "NYPL|https://nypl.bibliocommons.com",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("returns preferredLibrary in profile", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const profile = await caller.profile.me();
+    expect(profile).toHaveProperty("preferredLibrary");
   });
 });
 

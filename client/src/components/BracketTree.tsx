@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { trpc } from "@/lib/trpc";
+import { BookLinksMinimal } from "@/components/BookLinks";
 import { Crown, Info, Loader2, RotateCcw, Trophy, Undo2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -628,6 +629,7 @@ function BookSlot({
               {book.title}
             </p>
             <p className="text-[11px] text-muted-foreground truncate">{book.author}</p>
+            <BookLinksMinimal title={book.title} author={book.author} isbn={book.isbn} />
           </>
         ) : (
           <p className="text-sm text-muted-foreground italic">TBD</p>
