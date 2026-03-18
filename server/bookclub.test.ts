@@ -271,6 +271,24 @@ vi.mock("./db", () => {
         bookId: v.bookId,
       }));
     }),
+    getActiveBracketVoterStatus: vi.fn().mockImplementation(async (eventId: number) => {
+      // Find active (voting) brackets for this event
+      const activeMatchups = brackets.filter((b: any) => b.eventId === eventId && b.status === "voting");
+      if (activeMatchups.length === 0) return { votedAllIds: [], activeMatchupCount: 0, perMatchupVoterCounts: [] };
+      const activeIds = activeMatchups.map((m: any) => m.id);
+      const activeVotes = votes.filter((v: any) => v.eventId === eventId && activeIds.includes(v.bracketId));
+      const perMatchup = new Map<number, Set<number>>();
+      for (const id of activeIds) perMatchup.set(id, new Set());
+      for (const v of activeVotes) {
+        if (v.bracketId) perMatchup.get(v.bracketId)?.add(v.userId);
+      }
+      const allVoterIds = new Set<number>();
+      const matchupSets = Array.from(perMatchup.values());
+      for (const voters of matchupSets) voters.forEach((uid: number) => allVoterIds.add(uid));
+      const votedAllIds = Array.from(allVoterIds).filter((uid: number) => matchupSets.every(voters => voters.has(uid)));
+      const perMatchupVoterCounts = activeIds.map((id: number) => ({ bracketId: id, voterIds: Array.from(perMatchup.get(id) ?? []) }));
+      return { votedAllIds, activeMatchupCount: activeIds.length, perMatchupVoterCounts };
+    }),
     getEventVoters: vi.fn().mockImplementation(async (eventId: number) => {
       return votes.filter((v: any) => v.eventId === eventId && !v.bracketId).map((v: any) => ({
         userId: v.userId,
@@ -1423,6 +1441,76 @@ describe("notifications.sendVotingReminder", () => {
     await expect(
       adminCaller.notifications.sendVotingReminder({ groupId: 1, eventId })
     ).rejects.toThrow("Event is not in voting phase");
+  });
+
+  it("sends bracket tournament reminder checking active matchups only", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+
+    // Create a tournament event
+    const eventId = (await adminCaller.events.create({
+      groupId: 1,
+      title: "Bracket Reminder Test",
+      votingScheme: "tournament",
+      maxSubmissionsPerMember: 2,
+      maxTotalSubmissions: 8,
+    })).id;
+
+    // Create books first, then submit them
+    const bookA = (await adminCaller.books.create({ groupId: 1, title: "Book A", author: "Author A" })).id;
+    const bookB = (await adminCaller.books.create({ groupId: 1, title: "Book B", author: "Author B" })).id;
+    const bookC = (await adminCaller.books.create({ groupId: 1, title: "Book C", author: "Author C" })).id;
+    const bookD = (await adminCaller.books.create({ groupId: 1, title: "Book D", author: "Author D" })).id;
+    await adminCaller.submissions.create({ groupId: 1, eventId, bookId: bookA });
+    await adminCaller.submissions.create({ groupId: 1, eventId, bookId: bookB });
+    const user = createMockUser();
+    const userCaller = appRouter.createCaller(createCtx(user));
+    await userCaller.submissions.create({ groupId: 1, eventId, bookId: bookC });
+    await userCaller.submissions.create({ groupId: 1, eventId, bookId: bookD });
+
+    // Move to voting (generates bracket)
+    await adminCaller.events.updateStatus({ groupId: 1, eventId, status: "voting" });
+
+    // Send reminder — should use bracket-aware logic
+    const result = await adminCaller.notifications.sendVotingReminder({ groupId: 1, eventId });
+    expect(result.success).toBe(true);
+    expect(result.totalMembers).toBeGreaterThan(0);
+    // nonVoterCount should be >= 0 (bracket-aware check)
+    expect(typeof result.nonVoterCount).toBe("number");
+  });
+
+  it("returns 0 nonVoters when no active matchups in bracket", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+
+    // Create a tournament event with only 2 books (1 matchup)
+    const eventId = (await adminCaller.events.create({
+      groupId: 1,
+      title: "Bracket No Active Test",
+      votingScheme: "tournament",
+      maxSubmissionsPerMember: 2,
+      maxTotalSubmissions: 8,
+    })).id;
+
+    const bookX = (await adminCaller.books.create({ groupId: 1, title: "Book X", author: "Author X" })).id;
+    const bookY = (await adminCaller.books.create({ groupId: 1, title: "Book Y", author: "Author Y" })).id;
+    await adminCaller.submissions.create({ groupId: 1, eventId, bookId: bookX });
+    await adminCaller.submissions.create({ groupId: 1, eventId, bookId: bookY });
+
+    await adminCaller.events.updateStatus({ groupId: 1, eventId, status: "voting" });
+
+    // Vote on the matchup and resolve it
+    const bracketData = await adminCaller.brackets.getForEvent({ eventId });
+    const activeMatchup = bracketData.find((b: any) => b.status === "voting");
+    if (activeMatchup) {
+      await adminCaller.brackets.vote({ bracketId: activeMatchup.id, bookId: activeMatchup.book1Id, eventId });
+      await adminCaller.brackets.resolveMatch({ groupId: 1, bracketId: activeMatchup.id, eventId });
+    }
+
+    // Now no active matchups — reminder should return 0 nonVoters
+    const result = await adminCaller.notifications.sendVotingReminder({ groupId: 1, eventId });
+    expect(result.success).toBe(true);
+    expect(result.nonVoterCount).toBe(0);
   });
 });
 

@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -718,6 +718,48 @@ export async function getEventVoterIds(eventId: number): Promise<number[]> {
     .where(eq(votes.eventId, eventId))
     .groupBy(votes.userId);
   return rows.map(r => r.userId);
+}
+
+/**
+ * For bracket tournaments: get user IDs who have voted on ALL currently active (status=voting) matchups.
+ * A member is considered "voted" only if they voted on every active matchup.
+ * Returns { votedAllIds, activeMatchupCount, perMatchupVoterCounts }
+ */
+export async function getActiveBracketVoterStatus(eventId: number) {
+  const db = await getDb();
+  if (!db) return { votedAllIds: [] as number[], activeMatchupCount: 0, perMatchupVoterCounts: [] as { bracketId: number; voterIds: number[] }[] };
+  // Get all active (voting) bracket matchups for this event
+  const activeMatchups = await db
+    .select({ id: brackets.id })
+    .from(brackets)
+    .where(and(eq(brackets.eventId, eventId), eq(brackets.status, "voting")));
+  if (activeMatchups.length === 0) return { votedAllIds: [], activeMatchupCount: 0, perMatchupVoterCounts: [] };
+  const activeIds = activeMatchups.map(m => m.id);
+  // Get all votes for these active matchups
+  const activeVotes = await db
+    .select({ userId: votes.userId, bracketId: votes.bracketId })
+    .from(votes)
+    .where(and(eq(votes.eventId, eventId), inArray(votes.bracketId!, activeIds)));
+  // Build per-matchup voter sets
+  const perMatchup = new Map<number, Set<number>>();
+  for (const id of activeIds) perMatchup.set(id, new Set());
+  for (const v of activeVotes) {
+    if (v.bracketId) perMatchup.get(v.bracketId)?.add(v.userId);
+  }
+  // Find users who voted on ALL active matchups
+  const allVoterIds = new Set<number>();
+  const matchupSets = Array.from(perMatchup.values());
+  for (const voters of matchupSets) {
+    voters.forEach(uid => allVoterIds.add(uid));
+  }
+  const votedAllIds = Array.from(allVoterIds).filter(uid =>
+    matchupSets.every(voters => voters.has(uid))
+  );
+  const perMatchupVoterCounts = activeIds.map(id => ({
+    bracketId: id,
+    voterIds: Array.from(perMatchup.get(id) ?? []),
+  }));
+  return { votedAllIds, activeMatchupCount: activeIds.length, perMatchupVoterCounts };
 }
 
 // ─── Vote Undo / Admin Adjustment ──────────────────────────────────

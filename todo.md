@@ -320,3 +320,15 @@
 - [x] Frontend: add BookLinks (full, emphasized) to WinnerCard with amber highlight
 - [x] Frontend: library preference from profile auto-populates custom library link across all views
 - [x] Write tests for preferredLibrary in profile (124 total passing, 4 new tests)
+
+## Bug Fix: Voting Reminder Not Working Past 1st Round (v5.13)
+- [ ] Investigate why voting reminder fails for rounds after the first in bracket voting
+- [ ] Fix the backend/frontend logic so reminders work for all bracket rounds
+- [ ] Write/update tests for the fix
+
+## Bug Fix: Voting Reminder & Auto-Notification (v5.13)
+- [x] Root cause: getEventVoterIds queried ALL votes for the event, so after round 1 everyone appeared as "already voted"
+- [x] Fix: added getActiveBracketVoterStatus db helper that checks only active (status=voting) matchups
+- [x] Fix: sendVotingReminder now branches on tournament vs simple/ranked, using bracket-aware voter check for tournaments
+- [x] Auto-notification: resolveMatch now auto-sends notifyOwner when new matchups transition from pending to voting
+- [x] Write/update tests (126 total passing, 2 new bracket reminder tests)

@@ -375,19 +375,37 @@ export const appRouter = router({
         const event = await db.getEventById(input.eventId);
         if (!event) throw new TRPCError({ code: "NOT_FOUND" });
         if (event.status !== "voting") throw new TRPCError({ code: "BAD_REQUEST", message: "Event is not in voting phase" });
-        // Get all group members and find who hasn't voted
         const members = await db.getGroupMembers(input.groupId);
-        const voterIds = await db.getEventVoterIds(input.eventId);
-        const voterSet = new Set(voterIds);
-        const nonVoters = members.filter(m => !voterSet.has(m.id));
-        const nonVoterNames = nonVoters.map(m => m.name ?? m.email ?? "Unknown").join(", ");
         const totalMembers = members.length;
-        const votedCount = totalMembers - nonVoters.length;
-        await notifyOwner({
-          title: `Voting Reminder: ${event.title}`,
-          content: `${votedCount}/${totalMembers} members have voted for "${event.title}".${nonVoters.length > 0 ? `\n\nMembers who haven't voted yet: ${nonVoterNames}` : "\n\nEveryone has voted!"}${event.votingDeadline ? `\n\nVoting deadline: ${new Date(event.votingDeadline).toLocaleDateString()}` : ""}`,
-        });
-        return { success: true, votedCount, totalMembers, nonVoterCount: nonVoters.length };
+
+        if (event.votingScheme === "tournament") {
+          // For bracket tournaments: check who voted on ALL active matchups
+          const bracketStatus = await db.getActiveBracketVoterStatus(input.eventId);
+          if (bracketStatus.activeMatchupCount === 0) {
+            return { success: true, votedCount: totalMembers, totalMembers, nonVoterCount: 0 };
+          }
+          const votedAllSet = new Set(bracketStatus.votedAllIds);
+          const nonVoters = members.filter(m => !votedAllSet.has(m.id));
+          const nonVoterNames = nonVoters.map(m => m.name ?? m.email ?? "Unknown").join(", ");
+          const votedCount = totalMembers - nonVoters.length;
+          await notifyOwner({
+            title: `Voting Reminder: ${event.title}`,
+            content: `${votedCount}/${totalMembers} members have voted on all ${bracketStatus.activeMatchupCount} active matchup${bracketStatus.activeMatchupCount > 1 ? "s" : ""} for "${event.title}".${nonVoters.length > 0 ? `\n\nMembers who haven't voted on all matchups yet: ${nonVoterNames}` : "\n\nEveryone has voted on all active matchups!"}${event.votingDeadline ? `\n\nVoting deadline: ${new Date(event.votingDeadline).toLocaleDateString()}` : ""}`,
+          });
+          return { success: true, votedCount, totalMembers, nonVoterCount: nonVoters.length };
+        } else {
+          // For simple/ranked: check who has any vote for the event (non-bracket)
+          const voterIds = await db.getEventVoterIds(input.eventId);
+          const voterSet = new Set(voterIds);
+          const nonVoters = members.filter(m => !voterSet.has(m.id));
+          const nonVoterNames = nonVoters.map(m => m.name ?? m.email ?? "Unknown").join(", ");
+          const votedCount = totalMembers - nonVoters.length;
+          await notifyOwner({
+            title: `Voting Reminder: ${event.title}`,
+            content: `${votedCount}/${totalMembers} members have voted for "${event.title}".${nonVoters.length > 0 ? `\n\nMembers who haven't voted yet: ${nonVoterNames}` : "\n\nEveryone has voted!"}${event.votingDeadline ? `\n\nVoting deadline: ${new Date(event.votingDeadline).toLocaleDateString()}` : ""}`,
+          });
+          return { success: true, votedCount, totalMembers, nonVoterCount: nonVoters.length };
+        }
       }),
   }),
 
@@ -755,6 +773,28 @@ export const appRouter = router({
           const event = await db.getEventById(input.eventId);
           const winnerBook = await db.getBookById(winnerId);
           try { await notifyOwner({ title: `Tournament Champion: ${winnerBook?.title ?? "Unknown"}`, content: `"${winnerBook?.title}" by ${winnerBook?.author} has won the ${event?.title} tournament!` }); } catch {}
+        } else {
+          // Auto-notify when new matchups become available (not the final)
+          const updatedAllBrackets = await db.getEventBrackets(input.eventId);
+          const newlyActiveMatchups = updatedAllBrackets.filter(b => b.status === "voting" && b.id !== input.bracketId);
+          // Check if any matchups just became active (transitioned from pending to voting)
+          const justActivated = newlyActiveMatchups.filter(b => {
+            const prev = bracketList.find(p => p.id === b.id);
+            return prev && prev.status === "pending";
+          });
+          if (justActivated.length > 0) {
+            const event = await db.getEventById(input.eventId);
+            const matchupDescriptions = justActivated.map(m => {
+              const b1 = updatedAllBrackets.find(x => x.id === m.id);
+              return b1 ? `Matchup #${m.matchOrder} (Round ${m.round}${m.conference !== "A" && m.conference !== "B" ? "" : `, Conference ${m.conference}`})` : `Matchup #${m.matchOrder}`;
+            }).join(", ");
+            try {
+              await notifyOwner({
+                title: `New Round Available: ${event?.title ?? "Tournament"}`,
+                content: `New matchup${justActivated.length > 1 ? "s are" : " is"} now open for voting in "${event?.title}"!\n\n${matchupDescriptions}\n\nHead to the Book Club portal to cast your votes.`,
+              });
+            } catch {}
+          }
         }
 
         return { winnerId };
