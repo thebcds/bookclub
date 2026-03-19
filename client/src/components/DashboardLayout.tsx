@@ -42,6 +42,7 @@ import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useTheme, type Theme } from "@/contexts/ThemeContext";
 import CreateGroupDialog from "./CreateGroupDialog";
+import NotificationBell from "./NotificationBell";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import GroupSelector from "./GroupSelector";
 import { Button } from "./ui/button";
@@ -195,6 +196,10 @@ function DashboardLayoutContent({ children, setSidebarWidth }: { children: React
           </SidebarContent>
 
           <SidebarFooter className="p-3">
+            <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} mb-1`}>
+              {!isCollapsed && <span className="text-xs text-muted-foreground font-medium">Alerts</span>}
+              <NotificationBell />
+            </div>
             <ThemeToggle isCollapsed={isCollapsed} />
             <Separator className="my-1" />
             <DropdownMenu>
@@ -234,6 +239,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: { children: React
               <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
               <span className="tracking-tight text-foreground">{activeMenuItem?.label ?? "Menu"}</span>
             </div>
+            <NotificationBell />
           </div>
         )}
         <main className="flex-1 p-4 md:p-6">{children}</main>

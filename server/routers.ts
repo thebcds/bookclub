@@ -336,6 +336,32 @@ export const appRouter = router({
 
   // ─── Notifications ────────────────────────────────────────────
   notifications: router({
+    // In-app notification CRUD
+    list: protectedProcedure
+      .input(z.object({ limit: z.number().min(1).max(100).default(50) }))
+      .query(async ({ ctx, input }) => {
+        return db.getUserNotifications(ctx.user.id, input.limit);
+      }),
+    unreadCount: protectedProcedure.query(async ({ ctx }) => {
+      return db.getUnreadNotificationCount(ctx.user.id);
+    }),
+    markRead: protectedProcedure
+      .input(z.object({ notificationId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.markNotificationRead(input.notificationId, ctx.user.id);
+        return { success: true };
+      }),
+    markAllRead: protectedProcedure.mutation(async ({ ctx }) => {
+      await db.markAllNotificationsRead(ctx.user.id);
+      return { success: true };
+    }),
+    remove: protectedProcedure
+      .input(z.object({ notificationId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.deleteNotification(input.notificationId, ctx.user.id);
+        return { success: true };
+      }),
+    // Owner push notifications (legacy)
     notifyVotingOpen: protectedProcedure
       .input(z.object({ groupId: z.number(), eventId: z.number(), eventTitle: z.string() }))
       .mutation(async ({ ctx, input }) => {
@@ -527,8 +553,24 @@ export const appRouter = router({
         if (subs.length < 2) throw new TRPCError({ code: "BAD_REQUEST", message: `Cannot start voting with only ${subs.length} submission${subs.length === 1 ? '' : 's'}. At least 2 book submissions are required.` });
         if (event.votingScheme === "tournament") await generateTournamentBracket(input.eventId, subs);
         await db.updateEventStatus(input.eventId, "voting");
+        // Send in-app notifications to all group members
+        const members = await db.getGroupMembers(input.groupId);
+        const notifs = members.filter(m => m.id !== ctx.user.id).map(m => ({
+          userId: m.id, groupId: input.groupId, eventId: input.eventId,
+          type: "voting_open", title: `Voting Open: ${event.title}`,
+          message: `Voting has started for "${event.title}" with ${subs.length} submissions. Cast your vote now!`,
+        }));
+        try { await db.createBulkNotifications(notifs); } catch {}
         try { await notifyOwner({ title: `Voting Now Open: ${event.title}`, content: `The voting round for "${event.title}" has started with ${subs.length} book submissions.` }); } catch {}
         return { success: true };
+      }),
+    duplicate: protectedProcedure
+      .input(z.object({ groupId: z.number(), eventId: z.number(), title: z.string().min(1).max(256).optional() }))
+      .mutation(async ({ ctx, input }) => {
+        await requireGroupAdmin(ctx.user.id, input.groupId);
+        const newId = await db.duplicateEvent(input.eventId, ctx.user.id, input.title);
+        if (!newId) throw new TRPCError({ code: "NOT_FOUND", message: "Source event not found" });
+        return { id: newId };
       }),
   }),
 
@@ -772,6 +814,14 @@ export const appRouter = router({
           for (const sub of subs) await db.recordSubmissionHistory(sub.bookId, input.eventId, sub.bookId === winnerId);
           const event = await db.getEventById(input.eventId);
           const winnerBook = await db.getBookById(winnerId);
+          // In-app notifications: tournament champion
+          const members = await db.getGroupMembers(input.groupId);
+          const champNotifs = members.filter(m => m.id !== ctx.user.id).map(m => ({
+            userId: m.id, groupId: input.groupId, eventId: input.eventId,
+            type: "tournament_champion", title: `Champion: ${winnerBook?.title ?? "Unknown"}`,
+            message: `"${winnerBook?.title}" by ${winnerBook?.author} has won the ${event?.title} tournament!`,
+          }));
+          try { await db.createBulkNotifications(champNotifs); } catch {}
           try { await notifyOwner({ title: `Tournament Champion: ${winnerBook?.title ?? "Unknown"}`, content: `"${winnerBook?.title}" by ${winnerBook?.author} has won the ${event?.title} tournament!` }); } catch {}
         } else {
           // Auto-notify when new matchups become available (not the final)
@@ -788,6 +838,14 @@ export const appRouter = router({
               const b1 = updatedAllBrackets.find(x => x.id === m.id);
               return b1 ? `Matchup #${m.matchOrder} (Round ${m.round}${m.conference !== "A" && m.conference !== "B" ? "" : `, Conference ${m.conference}`})` : `Matchup #${m.matchOrder}`;
             }).join(", ");
+            // In-app notifications: new round available
+            const members = await db.getGroupMembers(input.groupId);
+            const roundNotifs = members.filter(m => m.id !== ctx.user.id).map(m => ({
+              userId: m.id, groupId: input.groupId, eventId: input.eventId,
+              type: "new_round", title: `New Round: ${event?.title ?? "Tournament"}`,
+              message: `New matchup${justActivated.length > 1 ? "s are" : " is"} ready for voting: ${matchupDescriptions}`,
+            }));
+            try { await db.createBulkNotifications(roundNotifs); } catch {}
             try {
               await notifyOwner({
                 title: `New Round Available: ${event?.title ?? "Tournament"}`,
@@ -971,6 +1029,14 @@ export const appRouter = router({
           await db.markBookAsRead(winnerId);
           for (const sub of subs) await db.recordSubmissionHistory(sub.bookId, input.eventId, sub.bookId === winnerId);
           const winnerBook = await db.getBookById(winnerId);
+          // In-app notifications: winner selected
+          const members = await db.getGroupMembers(input.groupId);
+          const winNotifs = members.filter(m => m.id !== ctx.user.id).map(m => ({
+            userId: m.id, groupId: input.groupId, eventId: input.eventId,
+            type: "winner_selected", title: `Winner: ${winnerBook?.title ?? "Unknown"}`,
+            message: `"${winnerBook?.title}" by ${winnerBook?.author} has been selected in "${event.title}"!`,
+          }));
+          try { await db.createBulkNotifications(winNotifs); } catch {}
           try { await notifyOwner({ title: `Winner Selected: ${event.title}`, content: `"${winnerBook?.title}" by ${winnerBook?.author} has won the ${event.title} selection!` }); } catch {}
         }
         return { winnerId };

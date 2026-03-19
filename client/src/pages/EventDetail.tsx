@@ -159,6 +159,15 @@ export default function EventDetailPage() {
     onError: (err) => toast.error(err.message),
   });
 
+  const duplicateEvent = trpc.events.duplicate.useMutation({
+    onSuccess: (data) => {
+      toast.success("Event duplicated!");
+      utils.events.list.invalidate();
+      setLocation(`/events/${data.id}`);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -259,6 +268,11 @@ export default function EventDetailPage() {
                   Reactivate Event
                 </DropdownMenuItem>
               )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => duplicateEvent.mutate({ groupId: gid!, eventId })}>
+                <Plus className="h-4 w-4 mr-2" />
+                Duplicate Event
+              </DropdownMenuItem>
               {event.status === "completed" && subs && subs.length > 0 && (
                 <>
                   <DropdownMenuSeparator />
@@ -1402,6 +1416,9 @@ function VotingView({
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold truncate">{sub.bookTitle}</p>
                   <p className="text-sm text-muted-foreground">{sub.bookAuthor}</p>
+                  {sub.bookDescription && (
+                    <ExpandableSummary text={sub.bookDescription} />
+                  )}
                   <div className="mt-1">
                     <BookLinks title={sub.bookTitle} author={sub.bookAuthor} isbn={sub.bookIsbn} variant="compact" />
                   </div>
@@ -1523,6 +1540,11 @@ function VotingView({
                     <div className="min-w-0 flex-1">
                       <span className="font-medium truncate block">{sub.bookTitle}</span>
                       <span className="text-sm text-muted-foreground block">{sub.bookAuthor}</span>
+                      {sub.bookDescription && (
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <ExpandableSummary text={sub.bookDescription} />
+                        </div>
+                      )}
                       <div className="mt-0.5" onClick={(e) => e.stopPropagation()}>
                         <BookLinks title={sub.bookTitle} author={sub.bookAuthor} isbn={sub.bookIsbn} variant="compact" />
                       </div>
@@ -1618,6 +1640,7 @@ function VotingView({
                 <div className="min-w-0 flex-1">
                   <p className="font-medium truncate">{r.bookTitle}</p>
                   <p className="text-xs text-muted-foreground">{r.bookAuthor}</p>
+                  {r.bookDescription && <ExpandableSummary text={r.bookDescription} />}
                   <div className="mt-0.5">
                     <BookLinks title={r.bookTitle} author={r.bookAuthor} isbn={r.bookIsbn} variant="compact" />
                   </div>
@@ -1726,6 +1749,27 @@ function AdminVoteAdjuster({
             </div>
           </CardContent>
         </Card>
+      )}
+    </div>
+  );
+}
+
+function ExpandableSummary({ text, maxLength = 120 }: { text: string; maxLength?: number }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!text) return null;
+  const isLong = text.length > maxLength;
+  return (
+    <div className="mt-1">
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        {expanded || !isLong ? text : `${text.slice(0, maxLength).trimEnd()}...`}
+      </p>
+      {isLong && (
+        <button
+          onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+          className="text-[10px] text-primary hover:underline mt-0.5"
+        >
+          {expanded ? "Show less" : "Read more"}
+        </button>
       )}
     </div>
   );

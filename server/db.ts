@@ -17,6 +17,7 @@ import {
   submissions,
   users,
   votes,
+  notifications,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -848,4 +849,77 @@ export async function getEventVoters(eventId: number) {
     .from(votes)
     .innerJoin(users, eq(votes.userId, users.id))
     .where(and(eq(votes.eventId, eventId), isNull(votes.bracketId)));
+}
+
+
+// ─── Notifications ──────────────────────────────────────────────────
+export async function createNotification(data: { userId: number; groupId?: number; eventId?: number; type: string; title: string; message?: string; metadata?: Record<string, any> }) {
+  const db = await getDb();
+  if (!db) return 0;
+  const [result] = await db.insert(notifications).values(data).$returningId();
+  return result.id;
+}
+
+export async function createBulkNotifications(items: { userId: number; groupId?: number; eventId?: number; type: string; title: string; message?: string; metadata?: Record<string, any> }[]) {
+  const db = await getDb();
+  if (!db || items.length === 0) return;
+  await db.insert(notifications).values(items);
+}
+
+export async function getUserNotifications(userId: number, limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(notifications).where(eq(notifications.userId, userId)).orderBy(desc(notifications.createdAt)).limit(limit);
+}
+
+export async function getUnreadNotificationCount(userId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  const [result] = await db.select({ count: sql<number>`count(*)` }).from(notifications).where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+  return result?.count ?? 0;
+}
+
+export async function markNotificationRead(notificationId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(notifications).set({ isRead: true }).where(and(eq(notifications.id, notificationId), eq(notifications.userId, userId)));
+}
+
+export async function markAllNotificationsRead(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(notifications).set({ isRead: true }).where(eq(notifications.userId, userId));
+}
+
+export async function deleteNotification(notificationId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(notifications).where(and(eq(notifications.id, notificationId), eq(notifications.userId, userId)));
+}
+
+// ─── Duplicate Event ────────────────────────────────────────────────
+export async function duplicateEvent(sourceEventId: number, createdBy: number, newTitle?: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const source = await getEventById(sourceEventId);
+  if (!source) return null;
+  const [result] = await db.insert(events).values({
+    groupId: source.groupId,
+    title: newTitle ?? `${source.title} (Copy)`,
+    description: source.description,
+    votingScheme: source.votingScheme,
+    anonymousVoting: source.anonymousVoting,
+    anonymousSubmissions: source.anonymousSubmissions,
+    hideTalliesUntilComplete: source.hideTalliesUntilComplete,
+    maxSubmissionsPerMember: source.maxSubmissionsPerMember,
+    maxTotalSubmissions: source.maxTotalSubmissions,
+    maxPageCount: source.maxPageCount,
+    allowPreviouslyRead: source.allowPreviouslyRead,
+    allowedGenres: source.allowedGenres,
+    minRating: source.minRating,
+    adminCurated: source.adminCurated,
+    status: "submissions_open",
+    createdBy,
+  }).$returningId();
+  return result.id;
 }

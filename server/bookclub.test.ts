@@ -297,6 +297,25 @@ vi.mock("./db", () => {
         bookId: v.bookId,
       }));
     }),
+    // Notification functions
+    createNotification: vi.fn().mockImplementation(async (data: any) => {
+      const id = nextId++;
+      return id;
+    }),
+    createBulkNotifications: vi.fn().mockResolvedValue(undefined),
+    getUserNotifications: vi.fn().mockResolvedValue([]),
+    getUnreadNotificationCount: vi.fn().mockResolvedValue(0),
+    markNotificationRead: vi.fn().mockResolvedValue(undefined),
+    markAllNotificationsRead: vi.fn().mockResolvedValue(undefined),
+    deleteNotification: vi.fn().mockResolvedValue(undefined),
+    // Duplicate event function
+    duplicateEvent: vi.fn().mockImplementation(async (sourceEventId: number, groupId: number, createdBy: number) => {
+      const source = events.find((e: any) => e.id === sourceEventId);
+      if (!source) throw new Error("Event not found");
+      const id = nextId++;
+      events.push({ id, ...source, groupId, createdBy, title: `${source.title} (Copy)`, status: "submissions_open", winningBookId: null, createdAt: new Date(), updatedAt: new Date() });
+      return id;
+    }),
   };
 });
 
@@ -2228,5 +2247,108 @@ describe("voting.getVoters", () => {
 
     const voters = await adminCaller.voting.getVoters({ eventId: event.id });
     expect(voters.length).toBe(0);
+  });
+});
+
+// ─── Notification Tests ────────────────────────────────────────────
+describe("notifications", () => {
+  it("returns unread count for authenticated user", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const count = await caller.notifications.unreadCount();
+    expect(count).toBe(0);
+  });
+
+  it("returns notification list for authenticated user", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const list = await caller.notifications.list({ limit: 10 });
+    expect(Array.isArray(list)).toBe(true);
+  });
+
+  it("rejects unauthenticated access to notifications", async () => {
+    const caller = appRouter.createCaller(createCtx(null));
+    await expect(caller.notifications.unreadCount()).rejects.toThrow();
+  });
+
+  it("marks a notification as read", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    // Should not throw even if notification doesn't exist in mock
+    await expect(caller.notifications.markRead({ notificationId: 999 })).resolves.not.toThrow();
+  });
+
+  it("marks all notifications as read", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    await expect(caller.notifications.markAllRead()).resolves.not.toThrow();
+  });
+
+  it("removes a notification", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    await expect(caller.notifications.remove({ notificationId: 999 })).resolves.not.toThrow();
+  });
+});
+
+// ─── Duplicate Event Tests ─────────────────────────────────────────
+describe("events.duplicate", () => {
+  it("duplicates an event as admin", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+
+    // Create an event first
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Original Event for Duplication",
+      votingScheme: "simple_majority",
+      maxSubmissionsPerMember: 3,
+    });
+
+    // Duplicate it
+    const duplicated = await adminCaller.events.duplicate({ groupId: 1, eventId: event.id });
+    expect(duplicated.id).toBeDefined();
+    expect(duplicated.id).not.toBe(event.id);
+  });
+
+  it("rejects duplicate by non-admin", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+    const regularCaller = appRouter.createCaller(createCtx(createMockUser()));
+
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Event to Duplicate (Non-Admin Test)",
+      votingScheme: "ranked_choice",
+    });
+
+    await expect(
+      regularCaller.events.duplicate({ groupId: 1, eventId: event.id })
+    ).rejects.toThrow();
+  });
+});
+
+// ─── Book Description in Submissions Tests ─────────────────────────
+describe("book descriptions in submissions", () => {
+  it("includes book description in event submissions", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+
+    // Create book with description
+    const book = await adminCaller.books.create({
+      groupId: 1,
+      title: "Descriptive Book",
+      author: "Author Desc",
+      description: "A fascinating story about testing.",
+    });
+
+    // Create event and submit
+    const event = await adminCaller.events.create({
+      groupId: 1,
+      title: "Description Test Event",
+      votingScheme: "simple_majority",
+    });
+
+    await adminCaller.submissions.create({ eventId: event.id, bookId: book.id, groupId: 1 });
+
+    const subs = await adminCaller.submissions.listForEvent({ eventId: event.id });
+    const sub = subs.find((s: any) => s.bookId === book.id);
+    expect(sub).toBeDefined();
+    expect(sub?.bookDescription).toBe("A fascinating story about testing.");
   });
 });

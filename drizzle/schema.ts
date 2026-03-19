@@ -239,6 +239,20 @@ export const bookReviews = mysqlTable("bookReviews", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+// ─── In-App Notifications ──────────────────────────────────────────
+export const notifications = mysqlTable("notifications", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  groupId: int("groupId"),
+  eventId: int("eventId"),
+  type: varchar("type", { length: 64 }).notNull(), // new_round, voting_open, event_completed, new_submission, etc.
+  title: varchar("title", { length: 256 }).notNull(),
+  message: text("message"),
+  isRead: boolean("isRead").default(false).notNull(),
+  metadata: json("metadata").$type<Record<string, any>>(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 // ─── Relations ──────────────────────────────────────────────────────
 export const groupsRelations = relations(groups, ({ many, one }) => ({
   members: many(groupMembers),
@@ -321,4 +335,10 @@ export const bookReviewsRelations = relations(bookReviews, ({ one }) => ({
 
 export const invitationsRelations = relations(invitations, ({ one }) => ({
   group: one(groups, { fields: [invitations.groupId], references: [groups.id] }),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, { fields: [notifications.userId], references: [users.id] }),
+  group: one(groups, { fields: [notifications.groupId], references: [groups.id] }),
+  event: one(events, { fields: [notifications.eventId], references: [events.id] }),
 }));

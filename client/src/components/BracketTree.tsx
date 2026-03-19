@@ -629,6 +629,7 @@ function BookSlot({
               {book.title}
             </p>
             <p className="text-[11px] text-muted-foreground truncate">{book.author}</p>
+            {book.description && <BracketSummary text={book.description} />}
             <BookLinksMinimal title={book.title} author={book.author} isbn={book.isbn} />
           </>
         ) : (
@@ -644,6 +645,27 @@ function BookSlot({
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+function BracketSummary({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const maxLen = 80;
+  const isLong = text.length > maxLen;
+  return (
+    <div className="mt-0.5">
+      <p className="text-[10px] text-muted-foreground/80 leading-snug">
+        {expanded || !isLong ? text : `${text.slice(0, maxLen).trimEnd()}...`}
+      </p>
+      {isLong && (
+        <button
+          onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+          className="text-[9px] text-primary hover:underline"
+        >
+          {expanded ? "less" : "more"}
+        </button>
+      )}
     </div>
   );
 }

@@ -322,9 +322,7 @@
 - [x] Write tests for preferredLibrary in profile (124 total passing, 4 new tests)
 
 ## Bug Fix: Voting Reminder Not Working Past 1st Round (v5.13)
-- [ ] Investigate why voting reminder fails for rounds after the first in bracket voting
-- [ ] Fix the backend/frontend logic so reminders work for all bracket rounds
-- [ ] Write/update tests for the fix
+- [x] (Superseded by v5.13 fix below)
 
 ## Bug Fix: Voting Reminder & Auto-Notification (v5.13)
 - [x] Root cause: getEventVoterIds queried ALL votes for the event, so after round 1 everyone appeared as "already voted"
@@ -332,3 +330,30 @@
 - [x] Fix: sendVotingReminder now branches on tournament vs simple/ranked, using bracket-aware voter check for tournaments
 - [x] Auto-notification: resolveMatch now auto-sends notifyOwner when new matchups transition from pending to voting
 - [x] Write/update tests (126 total passing, 2 new bracket reminder tests)
+
+## Expandable Book Summaries on Voting/Bracket Cards (v5.14a)
+- [x] Frontend: add ExpandableSummary component to simple majority voting cards
+- [x] Frontend: add ExpandableSummary to ranked choice unranked cards and results
+- [x] Frontend: add BracketSummary component to BracketTree BookSlot
+- [x] Book descriptions flow from books table → getBookById → bracket enrichment and submissions query
+
+## In-App Notification Bell (v5.14b)
+- [x] Backend: created notifications table (id, userId, groupId, eventId, type, title, message, isRead, createdAt)
+- [x] Backend: created db helpers (createNotification, createBulkNotifications, getUserNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, deleteNotification)
+- [x] Backend: created notification procedures (list, unreadCount, markRead, markAllRead, remove)
+- [x] Backend: auto-emit notifications on resolveMatch (new round available, tournament champion)
+- [x] Backend: auto-emit notifications on voting.resolve (winner selected for simple/ranked)
+- [x] Frontend: created NotificationBell component with unread badge, dropdown panel, mark-read, remove
+- [x] Frontend: integrated NotificationBell in DashboardLayout sidebar footer and mobile header
+
+## Duplicate Event Button (v5.14c)
+- [x] Backend: created events.duplicate procedure (admin-only, clones settings, resets status/winner)
+- [x] Backend: created duplicateEvent db helper
+- [x] Frontend: added "Duplicate Event" button in admin dropdown on EventDetail page
+- [x] Frontend: navigates to new duplicated event after creation
+
+## Tests for v5.14
+- [x] Write tests for notification CRUD (unreadCount, list, markRead, markAllRead, remove) — 6 tests
+- [x] Write tests for events.duplicate (admin success, non-admin rejection) — 2 tests
+- [x] Write test for book description in submissions — 1 test
+- [x] All 135 tests passing (9 new tests)
