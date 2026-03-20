@@ -9,7 +9,7 @@ import { useGroup } from "@/contexts/GroupContext";
 import { trpc } from "@/lib/trpc";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Camera, Crown, Globe, Loader2, Lock, Save, Shield, Trash2, UserMinus, LogOut, X, Tag } from "lucide-react";
+import { AlertTriangle, Camera, Crown, Globe, Loader2, Lock, Save, Shield, Trash2, UserMinus, LogOut, X, Tag, MessageSquare } from "lucide-react";
 
 const GENRE_TAGS = [
   "Sci-Fi", "Fantasy", "Mystery", "Romance", "Horror", "Thriller",
@@ -50,6 +50,7 @@ export default function GroupSettings() {
   const [transferTarget, setTransferTarget] = useState<string>("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [gchatWebhookUrl, setGchatWebhookUrl] = useState("");
 
   useEffect(() => {
     if (group) {
@@ -61,6 +62,7 @@ export default function GroupSettings() {
         const parsed = typeof group.tags === "string" ? JSON.parse(group.tags) : group.tags;
         setSelectedTags(Array.isArray(parsed) ? parsed : []);
       } catch { setSelectedTags([]); }
+      setGchatWebhookUrl(group.gchatWebhookUrl ?? "");
     }
   }, [group]);
 
@@ -348,6 +350,68 @@ export default function GroupSettings() {
               {transferOwnership.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Transfer Ownership
             </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Google Chat Integration */}
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5" />
+              Google Chat Integration
+            </CardTitle>
+            <CardDescription>
+              Connect a Google Chat space to receive notifications about voting reminders, new rounds, and winner announcements.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="gchat-webhook">Webhook URL</Label>
+              <Input
+                id="gchat-webhook"
+                placeholder="https://chat.googleapis.com/v1/spaces/..."
+                value={gchatWebhookUrl}
+                onChange={(e) => setGchatWebhookUrl(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                To get a webhook URL: Open your Google Chat space &rarr; Click the space name &rarr; Manage webhooks &rarr; Create a webhook &rarr; Copy the URL.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => {
+                  const url = gchatWebhookUrl.trim() || null;
+                  updateGroup.mutate({ groupId: activeGroupId, gchatWebhookUrl: url });
+                }}
+                disabled={updateGroup.isPending}
+                size="sm"
+              >
+                {updateGroup.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Save Webhook
+              </Button>
+              {gchatWebhookUrl && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setGchatWebhookUrl("");
+                    updateGroup.mutate({ groupId: activeGroupId, gchatWebhookUrl: null });
+                  }}
+                  disabled={updateGroup.isPending}
+                >
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Remove
+                </Button>
+              )}
+            </div>
+            {gchatWebhookUrl && (
+              <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
+                <div className="h-2 w-2 rounded-full bg-green-500" />
+                Google Chat webhook configured. Notifications will be posted to your space.
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

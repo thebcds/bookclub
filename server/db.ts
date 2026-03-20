@@ -131,7 +131,7 @@ export async function addGroupMember(groupId: number, userId: number, role: "adm
   return result[0].insertId;
 }
 
-export async function updateGroup(id: number, data: { name?: string; description?: string; isPublic?: boolean; coverUrl?: string | null; tags?: string[] }) {
+export async function updateGroup(id: number, data: { name?: string; description?: string; isPublic?: boolean; coverUrl?: string | null; tags?: string[]; gchatWebhookUrl?: string | null }) {
   const db = await getDb();
   if (!db) return;
   const updateData: Record<string, unknown> = {};
@@ -140,6 +140,7 @@ export async function updateGroup(id: number, data: { name?: string; description
   if (data.isPublic !== undefined) updateData.isPublic = data.isPublic;
   if (data.coverUrl !== undefined) updateData.coverUrl = data.coverUrl;
   if (data.tags !== undefined) updateData.tags = JSON.stringify(data.tags);
+  if (data.gchatWebhookUrl !== undefined) updateData.gchatWebhookUrl = data.gchatWebhookUrl;
   if (Object.keys(updateData).length > 0) {
     await db.update(groups).set(updateData).where(eq(groups.id, id));
   }
@@ -651,7 +652,7 @@ export async function getReadBooks(groupId: number) {
 }
 
 // ─── Member Profiles ──────────────────────────────────────────────
-export async function updateUserProfile(userId: number, data: { bio?: string; favoriteGenres?: string[]; avatarUrl?: string; preferredLibrary?: string | null }) {
+export async function updateUserProfile(userId: number, data: { bio?: string; favoriteGenres?: string[]; avatarUrl?: string; preferredLibrary?: string | null; emailNotifications?: boolean }) {
   const db = await getDb();
   if (!db) return;
   const updateData: Record<string, unknown> = {};
@@ -659,6 +660,7 @@ export async function updateUserProfile(userId: number, data: { bio?: string; fa
   if (data.favoriteGenres !== undefined) updateData.favoriteGenres = JSON.stringify(data.favoriteGenres);
   if (data.avatarUrl !== undefined) updateData.avatarUrl = data.avatarUrl;
   if (data.preferredLibrary !== undefined) updateData.preferredLibrary = data.preferredLibrary;
+  if (data.emailNotifications !== undefined) updateData.emailNotifications = data.emailNotifications;
   if (Object.keys(updateData).length > 0) {
     await db.update(users).set(updateData).where(eq(users.id, userId));
   }
@@ -675,6 +677,7 @@ export async function getUserProfile(userId: number) {
     favoriteGenres: users.favoriteGenres,
     avatarUrl: users.avatarUrl,
     preferredLibrary: users.preferredLibrary,
+    emailNotifications: users.emailNotifications,
     createdAt: users.createdAt,
   }).from(users).where(eq(users.id, userId)).limit(1);
   return result[0] ?? undefined;

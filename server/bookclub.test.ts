@@ -214,7 +214,7 @@ vi.mock("./db", () => {
     // Profile functions
     updateUserProfile: vi.fn().mockResolvedValue(undefined),
     getUserProfile: vi.fn().mockImplementation(async (userId: number) => {
-      return { id: userId, name: "Test User", email: "test@example.com", bio: null, favoriteGenres: "[]", avatarUrl: null, preferredLibrary: null, createdAt: new Date() };
+      return { id: userId, name: "Test User", email: "test@example.com", bio: null, favoriteGenres: "[]", avatarUrl: null, preferredLibrary: null, emailNotifications: true, createdAt: new Date() };
     }),
     getUserStats: vi.fn().mockResolvedValue({ groupsJoined: 1, eventsParticipated: 0, reviewsWritten: 0, votesCast: 0 }),
     // Submission removal functions
@@ -2350,5 +2350,64 @@ describe("book descriptions in submissions", () => {
     const sub = subs.find((s: any) => s.bookId === book.id);
     expect(sub).toBeDefined();
     expect(sub?.bookDescription).toBe("A fascinating story about testing.");
+  });
+});
+
+// ─── Email Notification Preference Tests ──────────────────────────
+describe("email notification preference", () => {
+  it("returns emailNotifications in profile", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const profile = await caller.profile.me();
+    expect(profile).toHaveProperty("emailNotifications");
+    expect(profile?.emailNotifications).toBe(true);
+  });
+
+  it("updates emailNotifications preference", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.profile.update({ emailNotifications: false });
+    expect(result.success).toBe(true);
+  });
+
+  it("saves emailNotifications alongside other profile fields", async () => {
+    const caller = appRouter.createCaller(createCtx(createMockUser()));
+    const result = await caller.profile.update({
+      bio: "Updated bio",
+      emailNotifications: true,
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+// ─── Google Chat Webhook Config Tests ─────────────────────────────
+describe("Google Chat webhook config", () => {
+  it("admin can set gchatWebhookUrl on group", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+    const result = await adminCaller.groups.update({
+      groupId: 1,
+      gchatWebhookUrl: "https://chat.googleapis.com/v1/spaces/test/messages?key=abc",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("admin can clear gchatWebhookUrl", async () => {
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+    const result = await adminCaller.groups.update({
+      groupId: 1,
+      gchatWebhookUrl: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("non-admin cannot set gchatWebhookUrl", async () => {
+    const member = createMockUser();
+    const memberCaller = appRouter.createCaller(createCtx(member));
+    await expect(
+      memberCaller.groups.update({
+        groupId: 1,
+        gchatWebhookUrl: "https://chat.googleapis.com/v1/spaces/test/messages?key=abc",
+      })
+    ).rejects.toThrow();
   });
 });

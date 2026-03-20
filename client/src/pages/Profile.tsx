@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
-import { Camera, Loader2, Save, User, BookOpen, Users, MessageSquare, Vote, X, Library, Trash2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Camera, Loader2, Save, User, BookOpen, Users, MessageSquare, Vote, X, Library, Trash2, Bell } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
@@ -55,6 +56,7 @@ export default function Profile() {
   const [customLibraryUrl, setCustomLibraryUrl] = useState("");
   const [showCustomLibrary, setShowCustomLibrary] = useState(false);
   const [preferredLibrary, setPreferredLibrary] = useState<string | null>(null);
+  const [emailNotifications, setEmailNotifications] = useState(true);
 
   useEffect(() => {
     if (profile) {
@@ -65,6 +67,7 @@ export default function Profile() {
       } catch { setSelectedGenres([]); }
       setAvatarPreview(profile.avatarUrl ?? null);
       setPreferredLibrary(profile.preferredLibrary ?? null);
+      setEmailNotifications(profile.emailNotifications ?? true);
     }
   }, [profile]);
 
@@ -262,12 +265,64 @@ export default function Profile() {
           </div>
 
           <Button
-            onClick={() => updateProfile.mutate({ bio, favoriteGenres: selectedGenres, preferredLibrary })}
+            onClick={() => updateProfile.mutate({ bio, favoriteGenres: selectedGenres, preferredLibrary, emailNotifications })}
             disabled={updateProfile.isPending}
           >
             {updateProfile.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             Save Profile
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Notification Preferences */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bell className="h-5 w-5" />
+            Notification Preferences
+          </CardTitle>
+          <CardDescription>
+            Control how you receive notifications about group activity
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="flex items-center gap-3">
+              <Bell className="h-5 w-5 text-primary" />
+              <div>
+                <Label htmlFor="email-notif" className="text-sm font-medium cursor-pointer">
+                  Email Notifications
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Receive email alerts for voting reminders, new rounds, and winner announcements
+                </p>
+              </div>
+            </div>
+            <Switch
+              id="email-notif"
+              checked={emailNotifications}
+              onCheckedChange={setEmailNotifications}
+            />
+          </div>
+          <div className="flex items-center justify-between rounded-lg border p-3 opacity-60">
+            <div className="flex items-center gap-3">
+              <Bell className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <Label className="text-sm font-medium">
+                  In-App Notifications
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Always enabled. Check the notification bell in the sidebar for updates.
+                </p>
+              </div>
+            </div>
+            <Switch checked={true} disabled />
+          </div>
+          {emailNotifications !== (profile?.emailNotifications ?? true) && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Don&apos;t forget to click &quot;Save Profile&quot; above to save your notification preferences.
+            </p>
+          )}
         </CardContent>
       </Card>
 

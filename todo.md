@@ -357,3 +357,31 @@
 - [x] Write tests for events.duplicate (admin success, non-admin rejection) — 2 tests
 - [x] Write test for book description in submissions — 1 test
 - [x] All 135 tests passing (9 new tests)
+
+## Enhanced In-App Notifications (v5.15a)
+- [x] Backend: trigger in-app notifications on voting reminder send (for each non-voter via createBulkNotifications)
+- [x] Backend: trigger in-app notifications on book selected (single-title and no_vote events)
+- [x] Backend: trigger in-app notifications on voting open (event status → voting)
+- [x] Backend: trigger in-app notifications on tournament champion decided
+- [x] Backend: trigger in-app notifications on simple/ranked winner selected
+- [x] Backend: unified dispatchNotification helper sends in-app + email + GChat in one call
+
+## Email Notifications (v5.15b)
+- [x] Schema: added emailNotifications boolean to users table (default true)
+- [x] Backend: created sendEmailNotification and notifyGroupByEmail helpers using built-in notifyOwner
+- [x] Backend: email sent on voting reminder, new round, winner selected, book selected
+- [x] Backend: dispatchNotification calls notifyGroupByEmail for all notification events
+- [x] Frontend: added email notification toggle (Switch) on Profile page
+- [x] Backend: profile.update procedure accepts emailNotifications field
+
+## Google Chat Webhook Integration (v5.15c)
+- [x] Schema: added gchatWebhookUrl text field to groups table
+- [x] Backend: created postToGoogleChat and notifyGroupGChat helpers (server/notificationHelpers.ts)
+- [x] Backend: GChat webhook called on voting reminder, new round, winner selected, book selected, voting open
+- [x] Backend: groups.update procedure accepts gchatWebhookUrl (admin only)
+- [x] Frontend: added Google Chat webhook URL input with test button on GroupSettings page
+
+## Tests for v5.15
+- [x] Write tests for email notification preference (profile returns emailNotifications, update toggle) — 3 tests
+- [x] Write tests for Google Chat webhook config (admin set, admin clear, non-admin rejection) — 3 tests
+- [x] All 141 tests passing (6 new tests)

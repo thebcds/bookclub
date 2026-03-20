@@ -7,6 +7,7 @@ import { notifyOwner } from "./_core/notification";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import * as db from "./db";
+import { dispatchNotification, notifyGroupGChat } from "./notificationHelpers";
 import { storagePut } from "./storage";
 
 // Helper: verify user is member of group, returns membership
@@ -55,10 +56,10 @@ export const appRouter = router({
         return group;
       }),
     update: protectedProcedure
-      .input(z.object({ groupId: z.number(), name: z.string().min(1).max(256).optional(), description: z.string().max(1000).optional(), isPublic: z.boolean().optional(), coverUrl: z.string().url().optional().nullable(), tags: z.array(z.string()).max(10).optional() }))
+      .input(z.object({ groupId: z.number(), name: z.string().min(1).max(256).optional(), description: z.string().max(1000).optional(), isPublic: z.boolean().optional(), coverUrl: z.string().url().optional().nullable(), tags: z.array(z.string()).max(10).optional(), gchatWebhookUrl: z.string().url().nullable().optional() }))
       .mutation(async ({ ctx, input }) => {
         await requireGroupAdmin(ctx.user.id, input.groupId);
-        await db.updateGroup(input.groupId, { name: input.name, description: input.description, isPublic: input.isPublic, coverUrl: input.coverUrl, tags: input.tags });
+        await db.updateGroup(input.groupId, { name: input.name, description: input.description, isPublic: input.isPublic, coverUrl: input.coverUrl, tags: input.tags, gchatWebhookUrl: input.gchatWebhookUrl });
         return { success: true };
       }),
     publicGroups: protectedProcedure
@@ -414,10 +415,15 @@ export const appRouter = router({
           const nonVoters = members.filter(m => !votedAllSet.has(m.id));
           const nonVoterNames = nonVoters.map(m => m.name ?? m.email ?? "Unknown").join(", ");
           const votedCount = totalMembers - nonVoters.length;
-          await notifyOwner({
-            title: `Voting Reminder: ${event.title}`,
-            content: `${votedCount}/${totalMembers} members have voted on all ${bracketStatus.activeMatchupCount} active matchup${bracketStatus.activeMatchupCount > 1 ? "s" : ""} for "${event.title}".${nonVoters.length > 0 ? `\n\nMembers who haven't voted on all matchups yet: ${nonVoterNames}` : "\n\nEveryone has voted on all active matchups!"}${event.votingDeadline ? `\n\nVoting deadline: ${new Date(event.votingDeadline).toLocaleDateString()}` : ""}`,
-          });
+          const reminderMsg = `${votedCount}/${totalMembers} members have voted on all ${bracketStatus.activeMatchupCount} active matchup${bracketStatus.activeMatchupCount > 1 ? "s" : ""} for "${event.title}".${nonVoters.length > 0 ? `\n\nMembers who haven't voted on all matchups yet: ${nonVoterNames}` : "\n\nEveryone has voted on all active matchups!"}${event.votingDeadline ? `\n\nVoting deadline: ${new Date(event.votingDeadline).toLocaleDateString()}` : ""}`;
+          try { await notifyOwner({ title: `Voting Reminder: ${event.title}`, content: reminderMsg }); } catch {}
+          // In-app notifications for non-voters
+          if (nonVoters.length > 0) {
+            const notifs = nonVoters.map(m => ({ userId: m.id, groupId: input.groupId, eventId: input.eventId, type: "voting_reminder", title: `Voting Reminder: ${event.title}`, message: `You haven't voted on all active matchups for "${event.title}" yet. Cast your votes before the deadline!` }));
+            try { await db.createBulkNotifications(notifs); } catch {}
+          }
+          // Google Chat webhook
+          try { await notifyGroupGChat({ groupId: input.groupId, title: `Voting Reminder: ${event.title}`, body: reminderMsg }); } catch {}
           return { success: true, votedCount, totalMembers, nonVoterCount: nonVoters.length };
         } else {
           // For simple/ranked: check who has any vote for the event (non-bracket)
@@ -426,10 +432,15 @@ export const appRouter = router({
           const nonVoters = members.filter(m => !voterSet.has(m.id));
           const nonVoterNames = nonVoters.map(m => m.name ?? m.email ?? "Unknown").join(", ");
           const votedCount = totalMembers - nonVoters.length;
-          await notifyOwner({
-            title: `Voting Reminder: ${event.title}`,
-            content: `${votedCount}/${totalMembers} members have voted for "${event.title}".${nonVoters.length > 0 ? `\n\nMembers who haven't voted yet: ${nonVoterNames}` : "\n\nEveryone has voted!"}${event.votingDeadline ? `\n\nVoting deadline: ${new Date(event.votingDeadline).toLocaleDateString()}` : ""}`,
-          });
+          const reminderMsg = `${votedCount}/${totalMembers} members have voted for "${event.title}".${nonVoters.length > 0 ? `\n\nMembers who haven't voted yet: ${nonVoterNames}` : "\n\nEveryone has voted!"}${event.votingDeadline ? `\n\nVoting deadline: ${new Date(event.votingDeadline).toLocaleDateString()}` : ""}`;
+          try { await notifyOwner({ title: `Voting Reminder: ${event.title}`, content: reminderMsg }); } catch {}
+          // In-app notifications for non-voters
+          if (nonVoters.length > 0) {
+            const notifs = nonVoters.map(m => ({ userId: m.id, groupId: input.groupId, eventId: input.eventId, type: "voting_reminder", title: `Voting Reminder: ${event.title}`, message: `You haven't voted for "${event.title}" yet. Cast your vote before the deadline!` }));
+            try { await db.createBulkNotifications(notifs); } catch {}
+          }
+          // Google Chat webhook
+          try { await notifyGroupGChat({ groupId: input.groupId, title: `Voting Reminder: ${event.title}`, body: reminderMsg }); } catch {}
           return { success: true, votedCount, totalMembers, nonVoterCount: nonVoters.length };
         }
       }),
@@ -562,6 +573,7 @@ export const appRouter = router({
         }));
         try { await db.createBulkNotifications(notifs); } catch {}
         try { await notifyOwner({ title: `Voting Now Open: ${event.title}`, content: `The voting round for "${event.title}" has started with ${subs.length} book submissions.` }); } catch {}
+        try { await notifyGroupGChat({ groupId: input.groupId, title: `Voting Now Open: ${event.title}`, body: `The voting round for "${event.title}" has started with ${subs.length} book submissions. Cast your vote now!` }); } catch {}
         return { success: true };
       }),
     duplicate: protectedProcedure
@@ -613,6 +625,7 @@ export const appRouter = router({
           await db.markBookAsRead(input.bookId);
           await db.recordSubmissionHistory(input.bookId, input.eventId, true);
           try { await notifyOwner({ title: `Book Selected: ${book.title}`, content: `"${book.title}" by ${book.author} was selected for "${event.title}" (single-title mode).` }); } catch {}
+          try { await dispatchNotification({ groupId: input.groupId, eventId: input.eventId, type: "book_selected", title: `Book Selected: ${book.title}`, message: `"${book.title}" by ${book.author} was selected for "${event.title}"!`, excludeUserId: ctx.user.id }); } catch {}
         }
         // For no_vote mode when all submissions are in: auto-complete with random pick
         else if (event.votingScheme === "no_vote" && (subs.length + 1) >= event.maxTotalSubmissions) {
@@ -627,6 +640,7 @@ export const appRouter = router({
           }
           const winnerBook = await db.getBookById(winnerId);
           try { await notifyOwner({ title: `Book Selected: ${winnerBook?.title}`, content: `"${winnerBook?.title}" was randomly selected from ${allBookIds.length} submissions for "${event.title}".` }); } catch {}
+          try { await dispatchNotification({ groupId: input.groupId, eventId: input.eventId, type: "book_selected", title: `Book Selected: ${winnerBook?.title}`, message: `"${winnerBook?.title}" was randomly selected from ${allBookIds.length} submissions for "${event.title}"!`, excludeUserId: ctx.user.id }); } catch {}
         }
         return { id };
       }),
@@ -823,6 +837,7 @@ export const appRouter = router({
           }));
           try { await db.createBulkNotifications(champNotifs); } catch {}
           try { await notifyOwner({ title: `Tournament Champion: ${winnerBook?.title ?? "Unknown"}`, content: `"${winnerBook?.title}" by ${winnerBook?.author} has won the ${event?.title} tournament!` }); } catch {}
+          try { await notifyGroupGChat({ groupId: input.groupId, title: `Tournament Champion: ${winnerBook?.title ?? "Unknown"}`, body: `"${winnerBook?.title}" by ${winnerBook?.author} has won the ${event?.title} tournament!` }); } catch {}
         } else {
           // Auto-notify when new matchups become available (not the final)
           const updatedAllBrackets = await db.getEventBrackets(input.eventId);
@@ -852,6 +867,7 @@ export const appRouter = router({
                 content: `New matchup${justActivated.length > 1 ? "s are" : " is"} now open for voting in "${event?.title}"!\n\n${matchupDescriptions}\n\nHead to the Book Club portal to cast your votes.`,
               });
             } catch {}
+            try { await notifyGroupGChat({ groupId: input.groupId, title: `New Round Available: ${event?.title ?? "Tournament"}`, body: `New matchup${justActivated.length > 1 ? "s are" : " is"} now open for voting in "${event?.title}"!\n\n${matchupDescriptions}` }); } catch {}
           }
         }
 
@@ -1038,6 +1054,7 @@ export const appRouter = router({
           }));
           try { await db.createBulkNotifications(winNotifs); } catch {}
           try { await notifyOwner({ title: `Winner Selected: ${event.title}`, content: `"${winnerBook?.title}" by ${winnerBook?.author} has won the ${event.title} selection!` }); } catch {}
+          try { await notifyGroupGChat({ groupId: input.groupId, title: `Winner Selected: ${event.title}`, body: `"${winnerBook?.title}" by ${winnerBook?.author} has been selected in "${event.title}"!` }); } catch {}
         }
         return { winnerId };
       }),
@@ -1208,9 +1225,9 @@ export const appRouter = router({
         return db.getUserProfile(input.userId);
       }),
     update: protectedProcedure
-      .input(z.object({ bio: z.string().max(500).optional(), favoriteGenres: z.array(z.string()).max(20).optional(), preferredLibrary: z.string().max(200).nullable().optional() }))
+      .input(z.object({ bio: z.string().max(500).optional(), favoriteGenres: z.array(z.string()).max(20).optional(), preferredLibrary: z.string().max(200).nullable().optional(), emailNotifications: z.boolean().optional() }))
       .mutation(async ({ ctx, input }) => {
-        await db.updateUserProfile(ctx.user.id, { bio: input.bio, favoriteGenres: input.favoriteGenres, preferredLibrary: input.preferredLibrary });
+        await db.updateUserProfile(ctx.user.id, { bio: input.bio, favoriteGenres: input.favoriteGenres, preferredLibrary: input.preferredLibrary, emailNotifications: input.emailNotifications });
         return { success: true };
       }),
     uploadAvatar: protectedProcedure
