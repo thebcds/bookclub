@@ -1,43 +1,62 @@
 /**
- * Notification helpers for email and Google Chat webhook integrations.
+ * Notification helpers for email (Resend) and Google Chat webhook integrations.
  * These complement the in-app notification system and the owner notifyOwner helper.
  */
 import { notifyOwner } from "./_core/notification";
 import * as db from "./db";
+import { sendBulkEmails, buildNotificationEmail } from "./emailService";
 
 // ─── Email Notifications ────────────────────────────────────────────
-// Uses the built-in notifyOwner as the email channel (Manus notification system).
-// For each member who has emailNotifications enabled, we send via notifyOwner
-// which delivers to the project owner. In a production system, this would use
-// a proper email service (SendGrid, SES, etc.) but for now we use the built-in
-// notification system to deliver email-like alerts.
-
-export async function sendEmailNotification(opts: {
-  title: string;
-  content: string;
-}) {
-  try {
-    await notifyOwner({ title: opts.title, content: opts.content });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Send email notifications to group members who have email notifications enabled.
- * Sends a single consolidated notification via the owner notification channel.
+ * Uses Resend to send individual personalized emails to each eligible member.
+ * Falls back to owner notification if Resend is not configured.
  */
 export async function notifyGroupByEmail(opts: {
   groupId: number;
   title: string;
   content: string;
+  ctaText?: string;
+  ctaUrl?: string;
+  excludeUserId?: number;
 }) {
   try {
-    // Send via the owner notification channel
+    // Always notify the owner via the built-in channel
     await notifyOwner({ title: opts.title, content: opts.content });
-    return true;
   } catch {
+    // Owner notification is best-effort
+  }
+
+  // Send individual emails to members via Resend
+  try {
+    if (!process.env.RESEND_API_KEY) {
+      console.warn("[Email] RESEND_API_KEY not configured, skipping member emails");
+      return false;
+    }
+    const members = await db.getGroupMembers(opts.groupId);
+    const eligible = members.filter(m => m.id !== opts.excludeUserId);
+    
+    const result = await sendBulkEmails({
+      members: eligible,
+      subject: opts.title,
+      htmlBuilder: (member) => buildNotificationEmail({
+        title: opts.title,
+        message: opts.content,
+        memberName: member.name,
+        ctaText: opts.ctaText,
+        ctaUrl: opts.ctaUrl,
+      }),
+      textBuilder: (member) => {
+        const greeting = member.name ? `Hi ${member.name},` : "Hi there,";
+        return `${greeting}\n\n${opts.content}\n\n---\nSent from your Book Club. Update notification preferences in your profile to stop receiving these emails.`;
+      },
+    });
+    
+    console.log(`[Email] Sent ${result.sent} emails, skipped ${result.skipped}`);
+    return result.sent > 0;
+  } catch (err) {
+    console.warn("[Email] Failed to send member emails:", err);
     return false;
   }
 }
@@ -47,7 +66,6 @@ export async function notifyGroupByEmail(opts: {
 /**
  * Post a message to a Google Chat space via webhook URL.
  * Google Chat webhooks accept a simple JSON payload with a "text" field.
- * Supports Google Chat's simple text formatting.
  * @see https://developers.google.com/workspace/chat/quickstart/webhooks
  */
 export async function postToGoogleChat(opts: {
@@ -98,7 +116,7 @@ export async function notifyGroupGChat(opts: {
 // ─── Unified Notification Dispatcher ────────────────────────────────
 
 /**
- * Send notifications across all channels: in-app, email (owner), and Google Chat.
+ * Send notifications across all channels: in-app, email (Resend), and Google Chat.
  * This is the main entry point for triggering notifications on key events.
  */
 export async function dispatchNotification(opts: {
@@ -109,8 +127,10 @@ export async function dispatchNotification(opts: {
   message: string;
   excludeUserId?: number;
   link?: string;
+  ctaText?: string;
+  ctaUrl?: string;
 }) {
-  const { groupId, eventId, type, title, message, excludeUserId, link } = opts;
+  const { groupId, eventId, type, title, message, excludeUserId, link, ctaText, ctaUrl } = opts;
   
   // 1. In-app notifications for all group members
   try {
@@ -132,9 +152,16 @@ export async function dispatchNotification(opts: {
     console.warn("[Dispatch] In-app notification failed:", err);
   }
 
-  // 2. Email notification via owner channel
+  // 2. Email notification via Resend (individual emails to members)
   try {
-    await notifyGroupByEmail({ groupId, title, content: message });
+    await notifyGroupByEmail({
+      groupId,
+      title,
+      content: message,
+      ctaText,
+      ctaUrl,
+      excludeUserId,
+    });
   } catch (err) {
     console.warn("[Dispatch] Email notification failed:", err);
   }

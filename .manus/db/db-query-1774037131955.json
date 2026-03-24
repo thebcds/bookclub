@@ -1,0 +1,34 @@
+{
+  "query": "SELECT * FROM notifications ORDER BY createdAt DESC LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2jzTpACBC9sWDEf.9875cf3229ad --database JtwK2AToo98P6Ad64BKFob --execute SELECT * FROM notifications ORDER BY createdAt DESC LIMIT 20;",
+  "rows": [
+    {
+      "id": "2",
+      "userId": "720036",
+      "groupId": "1",
+      "eventId": "60001",
+      "type": "voting_reminder",
+      "title": "Voting Reminder: Manga March Madness",
+      "message": "You haven't voted on all active matchups for \"Manga March Madness\" yet. Cast your votes before the deadline!",
+      "isRead": "0",
+      "metadata": "NULL",
+      "createdAt": "2026-03-20 19:59:42"
+    },
+    {
+      "id": "1",
+      "userId": "600001",
+      "groupId": "1",
+      "eventId": "60001",
+      "type": "voting_reminder",
+      "title": "Voting Reminder: Manga March Madness",
+      "message": "You haven't voted on all active matchups for \"Manga March Madness\" yet. Cast your votes before the deadline!",
+      "isRead": "1",
+      "metadata": "NULL",
+      "createdAt": "2026-03-20 19:59:42"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tuserId\tgroupId\teventId\ttype\ttitle\tmessage\tisRead\tmetadata\tcreatedAt\n2\t720036\t1\t60001\tvoting_reminder\tVoting Reminder: Manga March Madness\tYou haven't voted on all active matchups for \"Manga March Madness\" yet. Cast your votes before the deadline!\t0\tNULL\t2026-03-20 19:59:42\n1\t600001\t1\t60001\tvoting_reminder\tVoting Reminder: Manga March Madness\tYou haven't voted on all active matchups for \"Manga March Madness\" yet. Cast your votes before the deadline!\t1\tNULL\t2026-03-20 19:59:42\n",
+  "stderr": "",
+  "execution_time_ms": 61
+}

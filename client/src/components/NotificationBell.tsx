@@ -1,7 +1,9 @@
 import { trpc } from "@/lib/trpc";
 import { Bell, Check, CheckCheck, Trash2, Trophy, Vote, Swords, Info } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
+
 function formatDistanceToNow(date: Date): string {
   const now = Date.now();
   const diff = now - date.getTime();
@@ -17,6 +19,7 @@ function formatDistanceToNow(date: Date): string {
 
 const typeIcons: Record<string, typeof Bell> = {
   voting_open: Vote,
+  voting_reminder: Bell,
   new_round: Swords,
   winner_selected: Trophy,
   tournament_champion: Trophy,
@@ -24,6 +27,7 @@ const typeIcons: Record<string, typeof Bell> = {
 
 const typeColors: Record<string, string> = {
   voting_open: "text-blue-500",
+  voting_reminder: "text-orange-500",
   new_round: "text-amber-500",
   winner_selected: "text-emerald-500",
   tournament_champion: "text-yellow-500",
@@ -31,9 +35,11 @@ const typeColors: Record<string, string> = {
 
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; direction: "up" | "down" }>({ top: 0, left: 0, direction: "up" });
 
   const { data: unreadCount = 0 } = trpc.notifications.unreadCount.useQuery(undefined, {
     refetchInterval: 30000,
@@ -62,11 +68,54 @@ export default function NotificationBell() {
     },
   });
 
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+  const updatePosition = useCallback(() => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const dropdownHeight = 384; // max-h-96 = 24rem = 384px
+    const dropdownWidth = 320; // w-80 = 20rem = 320px
+    const spaceAbove = rect.top;
+    const spaceBelow = window.innerHeight - rect.bottom;
+
+    // Prefer opening upward from sidebar footer, but open downward if not enough space
+    if (spaceAbove >= dropdownHeight || spaceAbove > spaceBelow) {
+      // Open upward
+      setDropdownPos({
+        top: rect.top - Math.min(dropdownHeight, spaceAbove - 8),
+        left: Math.min(rect.right - dropdownWidth, Math.max(8, rect.left)),
+        direction: "up",
+      });
+    } else {
+      // Open downward
+      setDropdownPos({
+        top: rect.bottom + 4,
+        left: Math.min(rect.right - dropdownWidth, Math.max(8, rect.left)),
+        direction: "down",
+      });
     }
-    if (open) document.addEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    updatePosition();
+    // Recalculate on scroll/resize
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [open, updatePosition]);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        buttonRef.current?.contains(e.target as Node) ||
+        dropdownRef.current?.contains(e.target as Node)
+      ) return;
+      setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open]);
 
@@ -78,23 +127,17 @@ export default function NotificationBell() {
     }
   }
 
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(!open)}
-        className="relative flex items-center justify-center h-9 w-9 rounded-lg hover:bg-accent transition-colors focus:outline-none"
-        aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ""}`}
-      >
-        <Bell className="h-4 w-4 text-muted-foreground" />
-        {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
-            {unreadCount > 99 ? "99+" : unreadCount}
-          </span>
-        )}
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 max-h-96 overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-xl z-50 flex flex-col">
+  const dropdown = open
+    ? createPortal(
+        <div
+          ref={dropdownRef}
+          className="fixed w-80 max-h-96 overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-xl flex flex-col animate-in fade-in-0 zoom-in-95"
+          style={{
+            top: dropdownPos.top,
+            left: dropdownPos.left,
+            zIndex: 9999,
+          }}
+        >
           <div className="flex items-center justify-between px-4 py-3 border-b">
             <h3 className="font-semibold text-sm">Notifications</h3>
             {unreadCount > 0 && (
@@ -169,8 +212,27 @@ export default function NotificationBell() {
               })
             )}
           </div>
-        </div>
-      )}
-    </div>
+        </div>,
+        document.body
+      )
+    : null;
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        onClick={() => setOpen(!open)}
+        className="relative flex items-center justify-center h-9 w-9 rounded-lg hover:bg-accent transition-colors focus:outline-none"
+        aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ""}`}
+      >
+        <Bell className="h-4 w-4 text-muted-foreground" />
+        {unreadCount > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
+        )}
+      </button>
+      {dropdown}
+    </>
   );
 }

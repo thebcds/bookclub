@@ -99,7 +99,7 @@ export async function getGroupMembers(groupId: number) {
   const db = await getDb();
   if (!db) return [];
   return db
-    .select({ id: users.id, name: users.name, email: users.email, role: groupMembers.role, joinedAt: groupMembers.joinedAt, siteRole: users.role })
+    .select({ id: users.id, name: users.name, email: users.email, emailNotifications: users.emailNotifications, role: groupMembers.role, joinedAt: groupMembers.joinedAt, siteRole: users.role })
     .from(groupMembers)
     .innerJoin(users, eq(groupMembers.userId, users.id))
     .where(eq(groupMembers.groupId, groupId));

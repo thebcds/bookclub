@@ -385,3 +385,19 @@
 - [x] Write tests for email notification preference (profile returns emailNotifications, update toggle) — 3 tests
 - [x] Write tests for Google Chat webhook config (admin set, admin clear, non-admin rejection) — 3 tests
 - [x] All 141 tests passing (6 new tests)
+
+## Bug Fix: Emails Not Sent on Send Reminder (v5.16)
+- [x] Investigated: notifyOwner only sends to project owner, not individual members
+- [x] Installed Resend npm package for real email delivery to individual members
+- [x] Requested RESEND_API_KEY from user (auto-matched)
+- [x] Built emailService.ts with sendEmail, sendBulkEmails, buildNotificationEmail helpers
+- [x] Wired Resend email into sendVotingReminder for non-voters (both bracket and simple/ranked)
+- [x] Wired Resend email into dispatchNotification for all key events (via notifyGroupByEmail)
+- [x] Respects user emailNotifications preference (sendBulkEmails filters by opt-in)
+- [x] Write tests for email service (4 tests: build email with name, without name, no CTA, newlines)
+- [x] Note: Resend free tier requires verified domain to send to non-owner emails; onboarding@resend.dev can only send to the account owner's email
+
+## Bug Fix: Notification Dropdown Clipped in Sidebar (v5.16b)
+- [x] Fixed: NotificationBell now uses React portal (createPortal to document.body) to escape sidebar overflow
+- [x] Dropdown auto-detects available space and opens upward or downward accordingly
+- [x] All 145 tests passing (4 new email template tests)

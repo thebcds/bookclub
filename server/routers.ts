@@ -7,7 +7,8 @@ import { notifyOwner } from "./_core/notification";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import * as db from "./db";
-import { dispatchNotification, notifyGroupGChat } from "./notificationHelpers";
+import { dispatchNotification, notifyGroupGChat, notifyGroupByEmail } from "./notificationHelpers";
+import { sendBulkEmails, buildNotificationEmail } from "./emailService";
 import { storagePut } from "./storage";
 
 // Helper: verify user is member of group, returns membership
@@ -422,6 +423,21 @@ export const appRouter = router({
             const notifs = nonVoters.map(m => ({ userId: m.id, groupId: input.groupId, eventId: input.eventId, type: "voting_reminder", title: `Voting Reminder: ${event.title}`, message: `You haven't voted on all active matchups for "${event.title}" yet. Cast your votes before the deadline!` }));
             try { await db.createBulkNotifications(notifs); } catch {}
           }
+          // Email non-voters via Resend
+          if (nonVoters.length > 0) {
+            try {
+              await sendBulkEmails({
+                members: nonVoters,
+                subject: `Voting Reminder: ${event.title}`,
+                htmlBuilder: (m) => buildNotificationEmail({
+                  title: `Voting Reminder: ${event.title}`,
+                  message: `You haven't voted on all active matchups for "${event.title}" yet. There ${bracketStatus.activeMatchupCount > 1 ? "are" : "is"} ${bracketStatus.activeMatchupCount} active matchup${bracketStatus.activeMatchupCount > 1 ? "s" : ""} waiting for your vote.${event.votingDeadline ? `\n\nVoting deadline: ${new Date(event.votingDeadline).toLocaleDateString()}` : ""}`,
+                  memberName: m.name,
+                  ctaText: "Vote Now",
+                }),
+              });
+            } catch {}
+          }
           // Google Chat webhook
           try { await notifyGroupGChat({ groupId: input.groupId, title: `Voting Reminder: ${event.title}`, body: reminderMsg }); } catch {}
           return { success: true, votedCount, totalMembers, nonVoterCount: nonVoters.length };
@@ -438,6 +454,21 @@ export const appRouter = router({
           if (nonVoters.length > 0) {
             const notifs = nonVoters.map(m => ({ userId: m.id, groupId: input.groupId, eventId: input.eventId, type: "voting_reminder", title: `Voting Reminder: ${event.title}`, message: `You haven't voted for "${event.title}" yet. Cast your vote before the deadline!` }));
             try { await db.createBulkNotifications(notifs); } catch {}
+          }
+          // Email non-voters via Resend
+          if (nonVoters.length > 0) {
+            try {
+              await sendBulkEmails({
+                members: nonVoters,
+                subject: `Voting Reminder: ${event.title}`,
+                htmlBuilder: (m) => buildNotificationEmail({
+                  title: `Voting Reminder: ${event.title}`,
+                  message: `You haven't voted for "${event.title}" yet. Cast your vote before the deadline!${event.votingDeadline ? `\n\nVoting deadline: ${new Date(event.votingDeadline).toLocaleDateString()}` : ""}`,
+                  memberName: m.name,
+                  ctaText: "Vote Now",
+                }),
+              });
+            } catch {}
           }
           // Google Chat webhook
           try { await notifyGroupGChat({ groupId: input.groupId, title: `Voting Reminder: ${event.title}`, body: reminderMsg }); } catch {}
