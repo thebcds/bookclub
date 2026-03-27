@@ -21,6 +21,7 @@ import GroupSettingsPage from "./pages/GroupSettings";
 import BookDetailPage from "./pages/BookDetail";
 import DiscoverGroupsPage from "./pages/DiscoverGroups";
 import ProfilePage from "./pages/Profile";
+import EventTemplatesPage from "./pages/EventTemplates";
 
 function DashboardRouter() {
   return (
@@ -38,6 +39,7 @@ function DashboardRouter() {
           <Route path="/books/:id" component={BookDetailPage} />
           <Route path="/settings" component={GroupSettingsPage} />
           <Route path="/discover" component={DiscoverGroupsPage} />
+          <Route path="/templates" component={EventTemplatesPage} />
           <Route path="/profile" component={ProfilePage} />
           <Route component={NotFound} />
         </Switch>

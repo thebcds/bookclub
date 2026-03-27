@@ -1245,6 +1245,83 @@ export const appRouter = router({
       }),
   }),
 
+  // ─── Event Templates ─────────────────────────────────────────────
+  eventTemplates: router({
+    create: protectedProcedure
+      .input(z.object({
+        groupId: z.number(), name: z.string().min(1).max(256),
+        votingScheme: z.enum(["tournament", "simple_majority", "ranked_choice", "no_vote"]),
+        maxPageCount: z.number().positive().nullable().optional(),
+        allowPreviouslyRead: z.boolean().optional(),
+        allowedGenres: z.any().optional(),
+        minRating: z.number().min(1).max(5).nullable().optional(),
+        anonymousSubmissions: z.boolean().optional(),
+        maxTotalSubmissions: z.number().positive().optional(),
+        maxSubmissionsPerMember: z.number().positive().optional(),
+        adminCurated: z.boolean().optional(),
+        anonymousVoting: z.boolean().optional(),
+        hideTalliesUntilComplete: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await requireGroupAdmin(ctx.user.id, input.groupId);
+        const id = await db.createEventTemplate({ ...input, createdBy: ctx.user.id });
+        return { id };
+      }),
+    list: protectedProcedure
+      .input(z.object({ groupId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        await requireGroupMember(ctx.user.id, input.groupId);
+        return db.getEventTemplates(input.groupId);
+      }),
+    delete: protectedProcedure
+      .input(z.object({ groupId: z.number(), templateId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await requireGroupAdmin(ctx.user.id, input.groupId);
+        await db.deleteEventTemplate(input.templateId);
+        return { success: true };
+      }),
+    createEvent: protectedProcedure
+      .input(z.object({ groupId: z.number(), templateId: z.number(), title: z.string().min(1).max(256), description: z.string().max(2000).optional() }))
+      .mutation(async ({ ctx, input }) => {
+        await requireGroupAdmin(ctx.user.id, input.groupId);
+        const id = await db.createEventFromTemplate(input.templateId, { title: input.title, description: input.description, groupId: input.groupId, createdBy: ctx.user.id });
+        return { id };
+      }),
+    saveFromEvent: protectedProcedure
+      .input(z.object({ groupId: z.number(), eventId: z.number(), name: z.string().min(1).max(256) }))
+      .mutation(async ({ ctx, input }) => {
+        await requireGroupAdmin(ctx.user.id, input.groupId);
+        const event = await db.getEventById(input.eventId);
+        if (!event) throw new TRPCError({ code: "NOT_FOUND" });
+        const id = await db.createEventTemplate({
+          groupId: input.groupId, name: input.name, votingScheme: event.votingScheme,
+          maxPageCount: event.maxPageCount, allowPreviouslyRead: event.allowPreviouslyRead,
+          allowedGenres: event.allowedGenres, minRating: event.minRating,
+          anonymousSubmissions: event.anonymousSubmissions, maxTotalSubmissions: event.maxTotalSubmissions,
+          maxSubmissionsPerMember: event.maxSubmissionsPerMember, adminCurated: event.adminCurated,
+          anonymousVoting: event.anonymousVoting, hideTalliesUntilComplete: event.hideTalliesUntilComplete,
+          createdBy: ctx.user.id,
+        });
+        return { id };
+      }),
+  }),
+
+  // ─── Dashboard helpers ──────────────────────────────────────────
+  dashboard: router({
+    currentlyReading: protectedProcedure
+      .input(z.object({ groupId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        await requireGroupMember(ctx.user.id, input.groupId);
+        const book = await db.getCurrentlyReading(input.groupId);
+        if (!book) return null;
+        const [myProgress, groupAvg] = await Promise.all([
+          db.getMyReadingProgress(book.eventId, ctx.user.id),
+          db.getGroupAverageProgress(book.eventId),
+        ]);
+        return { ...book, myProgress, groupAvg };
+      }),
+  }),
+
   // ─── Profile ─────────────────────────────────────────────────────
   profile: router({
     me: protectedProcedure.query(async ({ ctx }) => {

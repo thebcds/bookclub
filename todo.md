@@ -401,3 +401,23 @@
 - [x] Fixed: NotificationBell now uses React portal (createPortal to document.body) to escape sidebar overflow
 - [x] Dropdown auto-detects available space and opens upward or downward accordingly
 - [x] All 145 tests passing (4 new email template tests)
+
+## Reading Progress Tracker (v5.17a)
+- [x] Backend: readingProgress table and procedures already existed from earlier work
+- [x] Backend: added getCurrentlyReading db helper (most recent completed event with a winning book)
+- [x] Backend: added dashboard.currentlyReading and dashboard.groupProgress procedures
+- [x] Frontend: added "Currently Reading" card on dashboard with book cover, progress bar, and page input
+- [x] Frontend: progress bar shows user's personal progress + group average
+- [x] Frontend: inline page input with total pages for quick progress updates
+- [x] Write test for dashboard.currentlyReading (1 test)
+
+## Event Templates (v5.17b)
+- [x] Schema: added eventTemplates table (id, groupId, name, votingScheme, settings JSON, createdBy, createdAt)
+- [x] Backend: created db helpers (createEventTemplate, getEventTemplates, getEventTemplateById, deleteEventTemplate, createEventFromTemplate)
+- [x] Backend: created eventTemplates procedures (create, list, delete, createEvent, saveFromEvent)
+- [x] Frontend: added "Save as Template" button in admin dropdown on EventDetail page
+- [x] Frontend: created EventTemplates management page with list, create-from-template, and delete
+- [x] Frontend: added Templates link in sidebar navigation
+- [x] Frontend: added route /templates in App.tsx
+- [x] Write tests for event templates (save, list, create-from-template, delete, non-admin rejection) — 5 tests
+- [x] All 151 tests passing (7 new tests)

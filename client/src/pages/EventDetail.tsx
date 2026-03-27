@@ -54,6 +54,7 @@ import {
   Vote,
   X,
   Bell,
+  FileText,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -155,6 +156,14 @@ export default function EventDetailPage() {
     onSuccess: () => {
       toast.success("Status updated!");
       utils.events.getById.invalidate({ id: eventId });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const saveAsTemplate = trpc.eventTemplates.saveFromEvent.useMutation({
+    onSuccess: () => {
+      toast.success("Template saved!");
+      utils.eventTemplates.list.invalidate();
     },
     onError: (err) => toast.error(err.message),
   });
@@ -272,6 +281,10 @@ export default function EventDetailPage() {
               <DropdownMenuItem onClick={() => duplicateEvent.mutate({ groupId: gid!, eventId })}>
                 <Plus className="h-4 w-4 mr-2" />
                 Duplicate Event
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => saveAsTemplate.mutate({ groupId: gid!, eventId, name: event.title + " Template" })}>
+                <FileText className="h-4 w-4 mr-2" />
+                Save as Template
               </DropdownMenuItem>
               {event.status === "completed" && subs && subs.length > 0 && (
                 <>

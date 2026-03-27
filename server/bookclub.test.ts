@@ -316,6 +316,22 @@ vi.mock("./db", () => {
       events.push({ id, ...source, groupId, createdBy, title: `${source.title} (Copy)`, status: "submissions_open", winningBookId: null, createdAt: new Date(), updatedAt: new Date() });
       return id;
     }),
+
+    // Event templates
+    createEventTemplate: vi.fn().mockImplementation(async (data: any) => {
+      return nextId++;
+    }),
+    getEventTemplates: vi.fn().mockResolvedValue([]),
+    getEventTemplateById: vi.fn().mockResolvedValue(null),
+    deleteEventTemplate: vi.fn().mockResolvedValue(undefined),
+    createEventFromTemplate: vi.fn().mockImplementation(async (templateId: number, data: any) => {
+      const id = nextId++;
+      events.push({ id, groupId: data.groupId, title: data.title, description: data.description ?? null, votingScheme: "simple_majority", status: "submissions_open", createdBy: data.createdBy, createdAt: new Date() });
+      return id;
+    }),
+
+    // Currently reading
+    getCurrentlyReading: vi.fn().mockResolvedValue(null),
   };
 });
 
@@ -2409,5 +2425,100 @@ describe("Google Chat webhook config", () => {
         gchatWebhookUrl: "https://chat.googleapis.com/v1/spaces/test/messages?key=abc",
       })
     ).rejects.toThrow();
+  });
+});
+
+// ─── Event Templates Tests ──────────────────────────────────────────
+describe("eventTemplates", () => {
+  it("admin can save template from event", async () => {
+    const admin = createAdminUser();
+    const caller = appRouter.createCaller(createCtx(admin));
+    // Create an event first
+    const { id: eventId } = await caller.events.create({
+      groupId: 1,
+      title: "Template Source Event",
+      votingScheme: "simple_majority",
+    });
+    const result = await caller.eventTemplates.saveFromEvent({
+      groupId: 1,
+      eventId,
+      name: "Monthly Pick Template",
+    });
+    expect(result).toBeDefined();
+    expect(result.id).toBeDefined();
+  });
+
+  it("non-admin cannot save template", async () => {
+    const user = createMockUser();
+    const caller = appRouter.createCaller(createCtx(user));
+    const admin = createAdminUser();
+    const adminCaller = appRouter.createCaller(createCtx(admin));
+    const { id: eventId } = await adminCaller.events.create({
+      groupId: 1,
+      title: "Template Source 2",
+      votingScheme: "ranked_choice",
+    });
+    await expect(
+      caller.eventTemplates.saveFromEvent({ groupId: 1, eventId, name: "Should Fail" })
+    ).rejects.toThrow();
+  });
+
+  it("admin can list templates", async () => {
+    const admin = createAdminUser();
+    const caller = appRouter.createCaller(createCtx(admin));
+    const templates = await caller.eventTemplates.list({ groupId: 1 });
+    expect(Array.isArray(templates)).toBe(true);
+  });
+
+  it("admin can create event from template", async () => {
+    const admin = createAdminUser();
+    const caller = appRouter.createCaller(createCtx(admin));
+    // First create a template
+    const { id: eventId } = await caller.events.create({
+      groupId: 1,
+      title: "Source for Template",
+      votingScheme: "simple_majority",
+    });
+    const tpl = await caller.eventTemplates.saveFromEvent({
+      groupId: 1,
+      eventId,
+      name: "Reusable Template",
+    });
+    // Now create event from template
+    const newEvent = await caller.eventTemplates.createEvent({
+      groupId: 1,
+      templateId: tpl.id,
+      title: "April 2026 Pick",
+    });
+    expect(newEvent).toBeDefined();
+    expect(newEvent.id).toBeDefined();
+  });
+
+  it("admin can delete template", async () => {
+    const admin = createAdminUser();
+    const caller = appRouter.createCaller(createCtx(admin));
+    const { id: eventId } = await caller.events.create({
+      groupId: 1,
+      title: "Deletable Source",
+      votingScheme: "tournament",
+    });
+    const tpl = await caller.eventTemplates.saveFromEvent({
+      groupId: 1,
+      eventId,
+      name: "To Delete",
+    });
+    await expect(
+      caller.eventTemplates.delete({ groupId: 1, templateId: tpl.id })
+    ).resolves.not.toThrow();
+  });
+});
+
+// ─── Dashboard Currently Reading Tests ──────────────────────────────
+describe("dashboard.currentlyReading", () => {
+  it("returns null when no completed events with winners", async () => {
+    const user = createMockUser();
+    const caller = appRouter.createCaller(createCtx(user));
+    const result = await caller.dashboard.currentlyReading({ groupId: 1 });
+    expect(result).toBeNull();
   });
 });

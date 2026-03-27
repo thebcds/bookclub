@@ -2,10 +2,13 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useGroup } from "@/contexts/GroupContext";
 import { trpc } from "@/lib/trpc";
 import { BookOpen, Calendar, ChevronRight, Plus, Trophy, Users } from "lucide-react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 
 export default function Home() {
@@ -27,6 +30,10 @@ export default function Home() {
     { enabled: !!gid }
   );
   const { data: upcomingCal, isLoading: calLoading } = trpc.calendar.upcoming.useQuery(
+    { groupId: gid! },
+    { enabled: !!gid }
+  );
+  const { data: currentlyReading, isLoading: readingLoading } = trpc.dashboard.currentlyReading.useQuery(
     { groupId: gid! },
     { enabled: !!gid }
   );
@@ -78,6 +85,13 @@ export default function Home() {
           Here&apos;s what&apos;s happening in <span className="font-medium text-foreground">{activeGroup.name}</span>.
         </p>
       </div>
+
+      {/* Currently Reading Progress Tracker */}
+      {readingLoading ? (
+        <Skeleton className="h-40 w-full" />
+      ) : currentlyReading ? (
+        <CurrentlyReadingCard data={currentlyReading} groupId={gid!} />
+      ) : null}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
@@ -228,5 +242,104 @@ export default function Home() {
         </Card>
       )}
     </div>
+  );
+}
+
+// ─── Currently Reading Card ──────────────────────────────────────────
+type CurrentlyReadingData = {
+  eventId: number; eventTitle: string; bookId: number; bookTitle: string; bookAuthor: string;
+  bookCoverUrl: string | null; pageCount: number | null; readingDeadline: Date | null;
+  myProgress: { currentPage: number; totalPages: number | null; percentComplete: number } | null;
+  groupAvg: { avgPercent: number; memberCount: number };
+};
+
+function CurrentlyReadingCard({ data, groupId }: { data: CurrentlyReadingData; groupId: number }) {
+  const utils = trpc.useUtils();
+  const updateProgress = trpc.readingProgress.update.useMutation({
+    onSuccess: () => utils.dashboard.currentlyReading.invalidate(),
+  });
+
+  const [editing, setEditing] = useState(false);
+  const [pageInput, setPageInput] = useState("");
+  const [totalInput, setTotalInput] = useState("");
+
+  const myPercent = data.myProgress?.percentComplete ?? 0;
+  const myPage = data.myProgress?.currentPage ?? 0;
+  const myTotal = data.myProgress?.totalPages ?? data.pageCount ?? 0;
+  const groupPercent = data.groupAvg?.avgPercent ?? 0;
+  const groupCount = data.groupAvg?.memberCount ?? 0;
+
+  const handleSave = () => {
+    const page = parseInt(pageInput) || 0;
+    const total = parseInt(totalInput) || myTotal || undefined;
+    updateProgress.mutate({ groupId, eventId: data.eventId, currentPage: page, totalPages: total });
+    setEditing(false);
+  };
+
+  return (
+    <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg font-serif flex items-center gap-2">
+          <BookOpen className="h-5 w-5 text-primary" />
+          Currently Reading
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex gap-4">
+          {data.bookCoverUrl ? (
+            <img src={data.bookCoverUrl} alt={data.bookTitle ?? ""} className="h-24 w-16 rounded-md object-cover shadow-md shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+          ) : (
+            <div className="h-24 w-16 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+              <BookOpen className="h-8 w-8 text-primary/50" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0 space-y-3">
+            <div>
+              <p className="font-semibold text-lg truncate">{data.bookTitle}</p>
+              <p className="text-sm text-muted-foreground">{data.bookAuthor}</p>
+            </div>
+
+            {/* My Progress */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Your progress</span>
+                <span className="font-medium">{myPercent}%{myTotal > 0 ? ` (p. ${myPage}/${myTotal})` : ""}</span>
+              </div>
+              <Progress value={myPercent} className="h-2" />
+            </div>
+
+            {/* Group Average */}
+            {groupCount > 0 && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Group average ({groupCount} tracking)</span>
+                  <span className="font-medium">{groupPercent}%</span>
+                </div>
+                <Progress value={groupPercent} className="h-1.5 opacity-60" />
+              </div>
+            )}
+
+            {/* Update Progress */}
+            {editing ? (
+              <div className="flex items-center gap-2">
+                <Input type="number" placeholder="Page" value={pageInput} onChange={(e) => setPageInput(e.target.value)} className="w-20 h-8 text-sm" min={0} />
+                <span className="text-muted-foreground text-sm">/</span>
+                <Input type="number" placeholder="Total" value={totalInput} onChange={(e) => setTotalInput(e.target.value)} className="w-20 h-8 text-sm" min={1} />
+                <Button size="sm" variant="default" className="h-8 text-xs" onClick={handleSave} disabled={updateProgress.isPending}>
+                  Save
+                </Button>
+                <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setEditing(false)}>
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setPageInput(String(myPage)); setTotalInput(String(myTotal || "")); setEditing(true); }}>
+                Update progress
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

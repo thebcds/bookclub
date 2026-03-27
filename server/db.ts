@@ -18,6 +18,7 @@ import {
   users,
   votes,
   notifications,
+  eventTemplates,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -925,4 +926,92 @@ export async function duplicateEvent(sourceEventId: number, createdBy: number, n
     createdBy,
   }).$returningId();
   return result.id;
+}
+
+
+// ─── Event Templates ──────────────────────────────────────────────
+export async function createEventTemplate(data: {
+  groupId: number; name: string; votingScheme: "tournament" | "simple_majority" | "ranked_choice" | "no_vote";
+  maxPageCount?: number | null; allowPreviouslyRead?: boolean; allowedGenres?: any; minRating?: number | null;
+  anonymousSubmissions?: boolean; maxTotalSubmissions?: number; maxSubmissionsPerMember?: number;
+  adminCurated?: boolean; anonymousVoting?: boolean; hideTalliesUntilComplete?: boolean; createdBy: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(eventTemplates).values({
+    groupId: data.groupId, name: data.name, votingScheme: data.votingScheme,
+    maxPageCount: data.maxPageCount ?? null, allowPreviouslyRead: data.allowPreviouslyRead ?? false,
+    allowedGenres: data.allowedGenres ?? null, minRating: data.minRating ?? null,
+    anonymousSubmissions: data.anonymousSubmissions ?? false, maxTotalSubmissions: data.maxTotalSubmissions ?? 8,
+    maxSubmissionsPerMember: data.maxSubmissionsPerMember ?? 1, adminCurated: data.adminCurated ?? false,
+    anonymousVoting: data.anonymousVoting ?? false, hideTalliesUntilComplete: data.hideTalliesUntilComplete ?? false,
+    createdBy: data.createdBy,
+  }).$returningId();
+  return result[0].id;
+}
+
+export async function getEventTemplates(groupId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(eventTemplates).where(eq(eventTemplates.groupId, groupId)).orderBy(desc(eventTemplates.createdAt));
+}
+
+export async function getEventTemplateById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(eventTemplates).where(eq(eventTemplates.id, id)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function deleteEventTemplate(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.delete(eventTemplates).where(eq(eventTemplates.id, id));
+}
+
+export async function createEventFromTemplate(templateId: number, data: { title: string; description?: string; groupId: number; createdBy: number }) {
+  const template = await getEventTemplateById(templateId);
+  if (!template) throw new Error("Template not found");
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(events).values({
+    groupId: data.groupId, title: data.title, description: data.description ?? null,
+    votingScheme: template.votingScheme, maxPageCount: template.maxPageCount,
+    allowPreviouslyRead: template.allowPreviouslyRead, allowedGenres: template.allowedGenres,
+    minRating: template.minRating, anonymousSubmissions: template.anonymousSubmissions,
+    maxTotalSubmissions: template.maxTotalSubmissions, maxSubmissionsPerMember: template.maxSubmissionsPerMember,
+    adminCurated: template.adminCurated, anonymousVoting: template.anonymousVoting,
+    hideTalliesUntilComplete: template.hideTalliesUntilComplete,
+    status: "submissions_open", createdBy: data.createdBy,
+  }).$returningId();
+  return result[0].id;
+}
+
+// ─── Currently Reading (most recent completed event with a winner) ──
+export async function getCurrentlyReading(groupId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db
+    .select({
+      eventId: events.id, eventTitle: events.title, bookId: books.id,
+      bookTitle: books.title, bookAuthor: books.author, bookCoverUrl: books.coverUrl,
+      pageCount: books.pageCount, readingDeadline: events.readingDeadline,
+    })
+    .from(events)
+    .innerJoin(books, eq(events.winningBookId, books.id))
+    .where(and(eq(events.groupId, groupId), eq(events.status, "completed")))
+    .orderBy(desc(events.updatedAt))
+    .limit(1);
+  return result[0] ?? null;
+}
+
+// ─── Group Reading Progress (average for an event) ─────────────────
+export async function getGroupAverageProgress(eventId: number) {
+  const db = await getDb();
+  if (!db) return { avgPercent: 0, memberCount: 0 };
+  const result = await db
+    .select({ avgPercent: sql<number>`COALESCE(AVG(${readingProgress.percentComplete}), 0)`, memberCount: sql<number>`COUNT(*)` })
+    .from(readingProgress)
+    .where(eq(readingProgress.eventId, eventId));
+  return { avgPercent: Math.round(result[0]?.avgPercent ?? 0), memberCount: result[0]?.memberCount ?? 0 };
 }

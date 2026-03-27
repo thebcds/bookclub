@@ -241,6 +241,26 @@ export const bookReviews = mysqlTable("bookReviews", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+// ─── Event Templates ──────────────────────────────────────────────
+export const eventTemplates = mysqlTable("eventTemplates", {
+  id: int("id").autoincrement().primaryKey(),
+  groupId: int("groupId").notNull(),
+  name: varchar("name", { length: 256 }).notNull(),
+  votingScheme: mysqlEnum("votingScheme", ["tournament", "simple_majority", "ranked_choice", "no_vote"]).notNull(),
+  maxPageCount: int("maxPageCount"),
+  allowPreviouslyRead: boolean("allowPreviouslyRead").default(false).notNull(),
+  allowedGenres: json("allowedGenres"),
+  minRating: int("minRating"),
+  anonymousSubmissions: boolean("anonymousSubmissions").default(false).notNull(),
+  maxTotalSubmissions: int("maxTotalSubmissions").default(8).notNull(),
+  maxSubmissionsPerMember: int("maxSubmissionsPerMember").default(1).notNull(),
+  adminCurated: boolean("adminCurated").default(false).notNull(),
+  anonymousVoting: boolean("anonymousVoting").default(false).notNull(),
+  hideTalliesUntilComplete: boolean("hideTalliesUntilComplete").default(false).notNull(),
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 // ─── In-App Notifications ──────────────────────────────────────────
 export const notifications = mysqlTable("notifications", {
   id: int("id").autoincrement().primaryKey(),
@@ -337,6 +357,11 @@ export const bookReviewsRelations = relations(bookReviews, ({ one }) => ({
 
 export const invitationsRelations = relations(invitations, ({ one }) => ({
   group: one(groups, { fields: [invitations.groupId], references: [groups.id] }),
+}));
+
+export const eventTemplatesRelations = relations(eventTemplates, ({ one }) => ({
+  group: one(groups, { fields: [eventTemplates.groupId], references: [groups.id] }),
+  creator: one(users, { fields: [eventTemplates.createdBy], references: [users.id] }),
 }));
 
 export const notificationsRelations = relations(notifications, ({ one }) => ({

@@ -32,6 +32,7 @@ import {
   Monitor,
   Moon,
   PanelLeft,
+  FileText,
   Settings,
   Sun,
   Trophy,
@@ -57,6 +58,7 @@ const menuItems = [
   { icon: MessageCircle, label: "Chat", path: "/chat", requiresGroup: true },
   { icon: Users, label: "Members", path: "/members", requiresGroup: true },
   { icon: Settings, label: "Settings", path: "/settings", requiresGroup: true },
+  { icon: FileText, label: "Templates", path: "/templates", requiresGroup: true },
   { icon: Globe, label: "Discover", path: "/discover", requiresGroup: false },
   { icon: User, label: "Profile", path: "/profile", requiresGroup: false },
 ];
